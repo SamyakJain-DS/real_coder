@@ -26,40 +26,41 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
     """
     Parse pytest -v output and extract individual test results.
  
-    Pytest -v lines look like:
-      tests/test_sse_broker.py::TestClass::test_name PASSED [ 12%]
-      tests/test_sse_broker.py::TestClass::test_name FAILED [ 14%]
-      tests/test_sse_broker.py::TestClass::test_name ERROR  [ 16%]
-      tests/test_sse_broker.py::TestClass::test_name SKIPPED [ 18%]
- 
-    We treat ERROR as FAILED so an empty codebase (build error) still
-    produces all-FAILED results in before.json.
+    Pytest verbose output lines look like:
+        tests/test_clv_pipeline.py::ClassName::test_name PASSED [ 10%]
+        tests/test_clv_pipeline.py::ClassName::test_name FAILED [ 20%]
+        tests/test_clv_pipeline.py::ClassName::test_name ERROR  [ 30%]
+        tests/test_clv_pipeline.py::ClassName::test_name SKIPPED [ 40%]
     """
     import re
-    results: List[TestResult] = []
-    seen: set = set()
- 
-    combined = stdout_content + "\n" + stderr_content
- 
-    # Match lines with a test node id followed by a status keyword
-    pattern = re.compile(
-        r"^(tests/[^\s]+\.py::[^\s]+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
-        re.MULTILINE,
-    )
+    results = []
+    seen = set()
  
     status_map = {
-        "PASSED": TestStatus.PASSED,
-        "FAILED": TestStatus.FAILED,
-        "ERROR": TestStatus.FAILED,   # treat ERROR as FAILED for F2P purposes
+        "PASSED":  TestStatus.PASSED,
+        "FAILED":  TestStatus.FAILED,
+        "ERROR":   TestStatus.ERROR,
         "SKIPPED": TestStatus.SKIPPED,
     }
  
-    for match in pattern.finditer(combined):
-        name = match.group(1)
-        raw_status = match.group(2)
-        if name not in seen:
-            seen.add(name)
-            results.append(TestResult(name=name, status=status_map[raw_status]))
+    # Match lines like: "path::Class::test_name STATUS [ N%]"
+    pattern = re.compile(
+        r"^(tests/\S+::[\w:]+)\s+(PASSED|FAILED|ERROR|SKIPPED)\s*(?:\[.*\])?\s*$"
+    )
+ 
+    combined = stdout_content + "\n" + stderr_content
+ 
+    for line in combined.splitlines():
+        line = line.strip()
+        match = pattern.match(line)
+        if match:
+            name, status_str = match.group(1), match.group(2)
+            if name not in seen:
+                seen.add(name)
+                results.append(TestResult(
+                    name=name,
+                    status=status_map[status_str],
+                ))
  
     return results
  

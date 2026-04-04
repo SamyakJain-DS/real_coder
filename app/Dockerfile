@@ -15,24 +15,16 @@ RUN apt-get update && apt-get install -y \
     python3-setuptools \
     python-is-python3 \
     unzip \
-    wget \
     && rm -rf /var/lib/apt/lists/*
  
 ###############################################
-# GO 1.22
-###############################################
-RUN wget -q https://go.dev/dl/go1.22.12.linux-amd64.tar.gz \
-    && tar -C /usr/local -xzf go1.22.12.linux-amd64.tar.gz \
-    && rm go1.22.12.linux-amd64.tar.gz
- 
-ENV PATH="/usr/local/go/bin:${PATH}"
- 
-###############################################
-# PYTHON TEST DEPENDENCIES
+# PYTHON DEPENDENCIES
 ###############################################
 RUN pip3 install --no-cache-dir \
-    pytest==8.3.5 \
-    requests==2.32.3
+    lifetimes \
+    pandas \
+    numpy \
+    pytest
  
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
