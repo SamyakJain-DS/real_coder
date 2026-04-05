@@ -26,15 +26,21 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
     """
     Parse pytest -v output and extract individual test results.
  
-    Pytest verbose output lines look like:
-        tests/test_clv_pipeline.py::ClassName::test_name PASSED [ 10%]
-        tests/test_clv_pipeline.py::ClassName::test_name FAILED [ 20%]
-        tests/test_clv_pipeline.py::ClassName::test_name ERROR  [ 30%]
-        tests/test_clv_pipeline.py::ClassName::test_name SKIPPED [ 40%]
+    Two output formats must be handled:
+ 
+    Standard pytest -v:
+        tests/test_vault.py::ClassName::test_name PASSED [  5%]
+        tests/test_vault.py::ClassName::test_name FAILED [ 10%]
+ 
+    pytest-xdist (parallel, -n auto):
+        [gw0] [  5%] PASSED tests/test_vault.py::ClassName::test_name
+        [gw1] [ 10%] FAILED tests/test_vault.py::ClassName::test_name
+ 
+    The two formats differ in that xdist puts STATUS before the node_id.
     """
     import re
-    results = []
-    seen = set()
+    results: List[TestResult] = []
+    seen: set = set()
  
     status_map = {
         "PASSED":  TestStatus.PASSED,
@@ -43,27 +49,42 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
         "SKIPPED": TestStatus.SKIPPED,
     }
  
-    # Match lines like: "path::Class::test_name STATUS [ N%]"
-    pattern = re.compile(
-        r"^(tests/\S+::[\w:]+)\s+(PASSED|FAILED|ERROR|SKIPPED)\s*(?:\[.*\])?\s*$"
+    # Pattern 1: standard pytest -v
+    #   <node_id> <STATUS> [<pct>%]
+    pattern_standard = re.compile(
+        r"^(\S+\.py(?:::\S+)+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
+        re.MULTILINE,
+    )
+ 
+    # Pattern 2: pytest-xdist
+    #   [gwN] [<pct>%] <STATUS> <node_id>
+    pattern_xdist = re.compile(
+        r"^\[gw\d+\]\s+\[\s*\d+%\]\s+(PASSED|FAILED|ERROR|SKIPPED)\s+(\S+\.py(?:::\S+)+)",
+        re.MULTILINE,
     )
  
     combined = stdout_content + "\n" + stderr_content
  
-    for line in combined.splitlines():
-        line = line.strip()
-        match = pattern.match(line)
-        if match:
-            name, status_str = match.group(1), match.group(2)
-            if name not in seen:
-                seen.add(name)
-                results.append(TestResult(
-                    name=name,
-                    status=status_map[status_str],
-                ))
+    # Try xdist format first; fall back to standard format.
+    xdist_matches = list(pattern_xdist.finditer(combined))
+    if xdist_matches:
+        for match in xdist_matches:
+            status_str = match.group(1)
+            node_id    = match.group(2)
+            if node_id in seen:
+                continue
+            seen.add(node_id)
+            results.append(TestResult(name=node_id, status=status_map[status_str]))
+    else:
+        for match in pattern_standard.finditer(combined):
+            node_id    = match.group(1)
+            status_str = match.group(2)
+            if node_id in seen:
+                continue
+            seen.add(node_id)
+            results.append(TestResult(name=node_id, status=status_map[status_str]))
  
     return results
- 
  
 ### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
