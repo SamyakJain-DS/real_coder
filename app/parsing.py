@@ -26,63 +26,50 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
     """
     Parse pytest -v output and extract individual test results.
  
-    Two output formats must be handled:
- 
-    Standard pytest -v:
-        tests/test_vault.py::ClassName::test_name PASSED [  5%]
-        tests/test_vault.py::ClassName::test_name FAILED [ 10%]
- 
-    pytest-xdist (parallel, -n auto):
-        [gw0] [  5%] PASSED tests/test_vault.py::ClassName::test_name
-        [gw1] [ 10%] FAILED tests/test_vault.py::ClassName::test_name
- 
-    The two formats differ in that xdist puts STATUS before the node_id.
+    Handles two line formats produced by pytest:
+      Format 1 (inline result):
+        tests/test_pipeline.py::Class::test_name PASSED [  5%]
+        tests/test_pipeline.py::Class::test_name FAILED [ 10%]
+      Format 2 (error prefix, e.g. collection errors surfaced in stderr):
+        ERROR tests/test_pipeline.py::Class::test_name - reason
     """
     import re
-    results: List[TestResult] = []
-    seen: set = set()
+ 
+    results = []
+    seen = set()
  
     status_map = {
         "PASSED":  TestStatus.PASSED,
         "FAILED":  TestStatus.FAILED,
-        "ERROR":   TestStatus.ERROR,
         "SKIPPED": TestStatus.SKIPPED,
+        "ERROR":   TestStatus.ERROR,
     }
- 
-    # Pattern 1: standard pytest -v
-    #   <node_id> <STATUS> [<pct>%]
-    pattern_standard = re.compile(
-        r"^(\S+\.py(?:::\S+)+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
-        re.MULTILINE,
-    )
- 
-    # Pattern 2: pytest-xdist
-    #   [gwN] [<pct>%] <STATUS> <node_id>
-    pattern_xdist = re.compile(
-        r"^\[gw\d+\]\s+\[\s*\d+%\]\s+(PASSED|FAILED|ERROR|SKIPPED)\s+(\S+\.py(?:::\S+)+)",
-        re.MULTILINE,
-    )
  
     combined = stdout_content + "\n" + stderr_content
  
-    # Try xdist format first; fall back to standard format.
-    xdist_matches = list(pattern_xdist.finditer(combined))
-    if xdist_matches:
-        for match in xdist_matches:
-            status_str = match.group(1)
-            node_id    = match.group(2)
-            if node_id in seen:
-                continue
-            seen.add(node_id)
-            results.append(TestResult(name=node_id, status=status_map[status_str]))
-    else:
-        for match in pattern_standard.finditer(combined):
-            node_id    = match.group(1)
-            status_str = match.group(2)
-            if node_id in seen:
-                continue
-            seen.add(node_id)
-            results.append(TestResult(name=node_id, status=status_map[status_str]))
+    # Format 1: "path/test_file.py::Class::method PASSED/FAILED/SKIPPED/ERROR"
+    pattern1 = re.compile(
+        r'^(\S+\.py::\S+)\s+(PASSED|FAILED|SKIPPED|ERROR)',
+        re.MULTILINE
+    )
+    for match in pattern1.finditer(combined):
+        name       = match.group(1)
+        status_str = match.group(2)
+        if name not in seen:
+            seen.add(name)
+            results.append(TestResult(name=name, status=status_map[status_str]))
+ 
+    # Format 2: "PASSED/FAILED/SKIPPED/ERROR path/test_file.py::Class::method"
+    pattern2 = re.compile(
+        r'^(PASSED|FAILED|SKIPPED|ERROR)\s+(\S+\.py::\S+)',
+        re.MULTILINE
+    )
+    for match in pattern2.finditer(combined):
+        status_str = match.group(1)
+        name       = match.group(2)
+        if name not in seen:
+            seen.add(name)
+            results.append(TestResult(name=name, status=status_map[status_str]))
  
     return results
  

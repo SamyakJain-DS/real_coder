@@ -12,19 +12,21 @@ RUN apt-get update && apt-get install -y \
     git \
     python3 \
     python3-pip \
-    python3-dev \
     python3-setuptools \
     python-is-python3 \
-    build-essential \
-    libsqlcipher-dev \
-    libsqlcipher0 \
     unzip \
     && rm -rf /var/lib/apt/lists/*
  
 ###############################################
 # PYTHON DEPENDENCIES
 ###############################################
-RUN pip3 install sqlcipher3 pyperclip pytest pytest-xdist
+RUN pip3 install --no-cache-dir \
+    pandas \
+    numpy \
+    scikit-learn \
+    scipy \
+    matplotlib \
+    pytest
  
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
