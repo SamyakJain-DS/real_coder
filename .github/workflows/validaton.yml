@@ -1,0 +1,43 @@
+name: Validate Compression Library
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Dagger CLI
+        run: |
+          curl -fsSL https://dl.dagger.io/dagger/install.sh | BIN_DIR=/usr/local/bin sh
+          dagger version
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Update APP_DIR in validation script
+        run: |
+          sed -i 's|APP_DIR=.*|APP_DIR="${{ github.workspace }}/app"|' validation.sh
+          chmod +x validation.sh
+
+      - name: Run validation via Dagger
+        run: dagger run bash validation.sh
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-results
+          path: |
+            app/before.json
+            app/after.json
+            app/before_stdout.txt
+            app/after_stdout.txt
+            app/fail_to_pass.json
+            app/pass_to_pass.json
