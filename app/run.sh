@@ -5,24 +5,41 @@ set -e
 # --- CONFIGURE THIS SECTION ---
 run_all_tests() {
   echo "Running all tests..."
+ 
+  JUNIT_JAR="/opt/junit-platform-console-standalone.jar"
+  COMPILE_DIR="/tmp/compression_test_classes"
+  REPORTS_DIR="/tmp/junit-reports"
+  rm -rf "$COMPILE_DIR" "$REPORTS_DIR"
+  mkdir -p "$COMPILE_DIR" "$REPORTS_DIR"
+ 
+  # Locate test sources: prefer /eval_assets/tests, fall back to sibling tests/ directory
   if [ -d /eval_assets/tests ]; then
-    # Running inside validation container: tests in /eval_assets, code in /app
-    cd /eval_assets
-    # Symlink /app/data into /eval_assets so tests resolve data/sample_data.csv
-    # via their _PARENT_DIR-relative path without modifying test code
-    [ ! -e /eval_assets/data ] && ln -sf /app/data /eval_assets/data || true
-    PYTHONPATH=/app:${PYTHONPATH:-} python -m pytest tests/ -v --tb=short --no-header 2>&1 || true
-  elif [ -d /app/tests ]; then
-    # Running inside Docker container with full codebase mounted at /app
-    cd /app
-    python -m pytest tests/ -v --tb=short --no-header 2>&1 || true
+    TEST_SRC_DIR="/eval_assets/tests"
   else
-    # Running locally: use the directory containing this script
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    cd "$SCRIPT_DIR"
-    PYTHON=$(command -v python 2>/dev/null || command -v python3)
-    $PYTHON -m pytest tests/ -v --tb=short --no-header 2>&1 || true
+    TEST_SRC_DIR="$SCRIPT_DIR/tests"
   fi
+ 
+  # Compile implementation sources from codebase if present (failures tolerated)
+  if [ -d /app/src/main/java ]; then
+    find /app/src/main/java -name "*.java" > /tmp/src_files.txt 2>/dev/null || true
+    if [ -s /tmp/src_files.txt ]; then
+      javac -cp "$JUNIT_JAR" -d "$COMPILE_DIR" @/tmp/src_files.txt 2>&1 || true
+    fi
+  fi
+ 
+  # Compile test sources against compiled implementation and JUnit
+  find "$TEST_SRC_DIR" -name "*.java" > /tmp/test_files.txt 2>/dev/null || true
+  if [ -s /tmp/test_files.txt ]; then
+    javac -cp "$COMPILE_DIR:$JUNIT_JAR" -d "$COMPILE_DIR" @/tmp/test_files.txt 2>&1 || true
+  fi
+ 
+  # Run tests and generate XML reports
+  java -jar "$JUNIT_JAR" \
+    --class-path "$COMPILE_DIR" \
+    --select-class CompressionLibraryTest \
+    --details=verbose \
+    --reports-dir="$REPORTS_DIR" 2>&1 || true
 }
 # --- END CONFIGURATION SECTION ---
 

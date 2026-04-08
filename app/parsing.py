@@ -24,52 +24,45 @@ class TestResult:
  
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
-    Parse pytest -v output and extract individual test results.
- 
-    Handles two line formats produced by pytest:
-      Format 1 (inline result):
-        tests/test_pipeline.py::Class::test_name PASSED [  5%]
-        tests/test_pipeline.py::Class::test_name FAILED [ 10%]
-      Format 2 (error prefix, e.g. collection errors surfaced in stderr):
-        ERROR tests/test_pipeline.py::Class::test_name - reason
+    Read JUnit XML reports written to /tmp/junit-reports/ by run.sh
+    and return one TestResult per test case.
     """
-    import re
+    import glob
+    import xml.etree.ElementTree as ET
  
     results = []
     seen = set()
  
-    status_map = {
-        "PASSED":  TestStatus.PASSED,
-        "FAILED":  TestStatus.FAILED,
-        "SKIPPED": TestStatus.SKIPPED,
-        "ERROR":   TestStatus.ERROR,
-    }
+    for report_file in sorted(glob.glob('/tmp/junit-reports/*.xml')):
+        try:
+            root = ET.parse(report_file).getroot()
+            if root.tag == 'testsuites':
+                testsuites = root.findall('testsuite')
+            elif root.tag == 'testsuite':
+                testsuites = [root]
+            else:
+                continue
  
-    combined = stdout_content + "\n" + stderr_content
+            for testsuite in testsuites:
+                for testcase in testsuite.findall('testcase'):
+                    classname = testcase.get('classname', '')
+                    name = testcase.get('name', '')
+                    test_id = f"{classname}::{name}"
  
-    # Format 1: "path/test_file.py::Class::method PASSED/FAILED/SKIPPED/ERROR"
-    pattern1 = re.compile(
-        r'^(\S+\.py::\S+)\s+(PASSED|FAILED|SKIPPED|ERROR)',
-        re.MULTILINE
-    )
-    for match in pattern1.finditer(combined):
-        name       = match.group(1)
-        status_str = match.group(2)
-        if name not in seen:
-            seen.add(name)
-            results.append(TestResult(name=name, status=status_map[status_str]))
+                    if test_id in seen:
+                        continue
+                    seen.add(test_id)
  
-    # Format 2: "PASSED/FAILED/SKIPPED/ERROR path/test_file.py::Class::method"
-    pattern2 = re.compile(
-        r'^(PASSED|FAILED|SKIPPED|ERROR)\s+(\S+\.py::\S+)',
-        re.MULTILINE
-    )
-    for match in pattern2.finditer(combined):
-        status_str = match.group(1)
-        name       = match.group(2)
-        if name not in seen:
-            seen.add(name)
-            results.append(TestResult(name=name, status=status_map[status_str]))
+                    if testcase.find('failure') is not None or testcase.find('error') is not None:
+                        status = TestStatus.FAILED
+                    elif testcase.find('skipped') is not None:
+                        status = TestStatus.SKIPPED
+                    else:
+                        status = TestStatus.PASSED
+ 
+                    results.append(TestResult(name=test_id, status=status))
+        except ET.ParseError:
+            continue
  
     return results
  

@@ -15,18 +15,16 @@ RUN apt-get update && apt-get install -y \
     python3-setuptools \
     python-is-python3 \
     unzip \
+    openjdk-17-jdk \
+    wget \
     && rm -rf /var/lib/apt/lists/*
  
 ###############################################
-# PYTHON DEPENDENCIES
+# JAVA TEST DEPENDENCIES
 ###############################################
-RUN pip3 install --no-cache-dir \
-    pandas \
-    numpy \
-    scikit-learn \
-    scipy \
-    matplotlib \
-    pytest
+RUN wget -q \
+    "https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.10.2/junit-platform-console-standalone-1.10.2.jar" \
+    -O /opt/junit-platform-console-standalone.jar
  
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
