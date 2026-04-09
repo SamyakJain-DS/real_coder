@@ -26,6 +26,16 @@ RUN wget -q \
     "https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.10.2/junit-platform-console-standalone-1.10.2.jar" \
     -O /opt/junit-platform-console-standalone.jar
  
+RUN wget -q \
+    "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.16.1/jackson-databind-2.16.1.jar" \
+    -O /opt/jackson-databind.jar \
+    && wget -q \
+    "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-core/2.16.1/jackson-core-2.16.1.jar" \
+    -O /opt/jackson-core.jar \
+    && wget -q \
+    "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.16.1/jackson-annotations-2.16.1.jar" \
+    -O /opt/jackson-annotations.jar
+ 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
 ###############################################

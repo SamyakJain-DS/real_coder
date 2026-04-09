@@ -7,7 +7,8 @@ run_all_tests() {
   echo "Running all tests..."
  
   JUNIT_JAR="/opt/junit-platform-console-standalone.jar"
-  COMPILE_DIR="/tmp/compression_test_classes"
+  JACKSON_JARS="/opt/jackson-databind.jar:/opt/jackson-core.jar:/opt/jackson-annotations.jar"
+  COMPILE_DIR="/tmp/objectdiff_test_classes"
   REPORTS_DIR="/tmp/junit-reports"
   rm -rf "$COMPILE_DIR" "$REPORTS_DIR"
   mkdir -p "$COMPILE_DIR" "$REPORTS_DIR"
@@ -24,20 +25,20 @@ run_all_tests() {
   if [ -d /app/src/main/java ]; then
     find /app/src/main/java -name "*.java" > /tmp/src_files.txt 2>/dev/null || true
     if [ -s /tmp/src_files.txt ]; then
-      javac -cp "$JUNIT_JAR" -d "$COMPILE_DIR" @/tmp/src_files.txt 2>&1 || true
+      javac -cp "$JUNIT_JAR:$JACKSON_JARS" -d "$COMPILE_DIR" @/tmp/src_files.txt 2>&1 || true
     fi
   fi
  
-  # Compile test sources against compiled implementation and JUnit
+  # Compile test sources against compiled implementation, JUnit, and Jackson
   find "$TEST_SRC_DIR" -name "*.java" > /tmp/test_files.txt 2>/dev/null || true
   if [ -s /tmp/test_files.txt ]; then
-    javac -cp "$COMPILE_DIR:$JUNIT_JAR" -d "$COMPILE_DIR" @/tmp/test_files.txt 2>&1 || true
+    javac -cp "$COMPILE_DIR:$JUNIT_JAR:$JACKSON_JARS" -d "$COMPILE_DIR" @/tmp/test_files.txt 2>&1 || true
   fi
  
   # Run tests and generate XML reports
   java -jar "$JUNIT_JAR" \
-    --class-path "$COMPILE_DIR" \
-    --select-class CompressionLibraryTest \
+    --class-path "$COMPILE_DIR:$JACKSON_JARS" \
+    --select-class ObjectDiffLibraryTest \
     --details=verbose \
     --reports-dir="$REPORTS_DIR" 2>&1 || true
 }
