@@ -14,27 +14,23 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-setuptools \
     python-is-python3 \
-    unzip \
     openjdk-17-jdk \
     wget \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
- 
+
 ###############################################
-# JAVA TEST DEPENDENCIES
+# JAVA TEST INFRASTRUCTURE — JARs at /opt/
 ###############################################
-RUN wget -q \
-    "https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.10.2/junit-platform-console-standalone-1.10.2.jar" \
-    -O /opt/junit-platform-console-standalone.jar
- 
-RUN wget -q \
-    "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.16.1/jackson-databind-2.16.1.jar" \
-    -O /opt/jackson-databind.jar \
-    && wget -q \
-    "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-core/2.16.1/jackson-core-2.16.1.jar" \
-    -O /opt/jackson-core.jar \
-    && wget -q \
-    "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.16.1/jackson-annotations-2.16.1.jar" \
-    -O /opt/jackson-annotations.jar
+RUN wget -q -O /opt/junit-platform-console-standalone.jar \
+    "https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.10.0/junit-platform-console-standalone-1.10.0.jar"
+
+RUN wget -q -O /opt/jackson-databind.jar \
+    "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.15.3/jackson-databind-2.15.3.jar" && \
+    wget -q -O /opt/jackson-core.jar \
+    "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-core/2.15.3/jackson-core-2.15.3.jar" && \
+    wget -q -O /opt/jackson-annotations.jar \
+    "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.15.3/jackson-annotations-2.15.3.jar"
  
 ###############################################
 # WORKING DIRECTORY + GIT SETUP

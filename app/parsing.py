@@ -23,49 +23,34 @@ class TestResult:
 ### Implement the parsing logic below ###
  
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
-    """
-    Read JUnit XML reports written to /tmp/junit-reports/ by run.sh
-    and return one TestResult per test case.
-    """
     import glob
     import xml.etree.ElementTree as ET
- 
+
     results = []
     seen = set()
- 
-    for report_file in sorted(glob.glob('/tmp/junit-reports/*.xml')):
+
+    for xml_path in glob.glob("/tmp/junit-reports/TEST-*.xml"):
         try:
-            root = ET.parse(report_file).getroot()
-            if root.tag == 'testsuites':
-                testsuites = root.findall('testsuite')
-            elif root.tag == 'testsuite':
-                testsuites = [root]
-            else:
-                continue
- 
-            for testsuite in testsuites:
-                for testcase in testsuite.findall('testcase'):
-                    classname = testcase.get('classname', '')
-                    name = testcase.get('name', '')
-                    test_id = f"{classname}::{name}"
- 
-                    if test_id in seen:
-                        continue
-                    seen.add(test_id)
- 
-                    if testcase.find('failure') is not None or testcase.find('error') is not None:
-                        status = TestStatus.FAILED
-                    elif testcase.find('skipped') is not None:
-                        status = TestStatus.SKIPPED
-                    else:
-                        status = TestStatus.PASSED
- 
-                    results.append(TestResult(name=test_id, status=status))
-        except ET.ParseError:
-            continue
- 
+            root = ET.parse(xml_path).getroot()
+            for tc in root.iter("testcase"):
+                classname = tc.get("classname", "")
+                method    = tc.get("name", "")
+                full_name = f"{classname}#{method}" if classname else method
+                if full_name in seen:
+                    continue
+                seen.add(full_name)
+                if tc.find("failure") is not None or tc.find("error") is not None:
+                    status = TestStatus.FAILED
+                elif tc.find("skipped") is not None:
+                    status = TestStatus.SKIPPED
+                else:
+                    status = TestStatus.PASSED
+                results.append(TestResult(name=full_name, status=status))
+        except Exception:
+            pass
+
     return results
- 
+
 ### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
 
