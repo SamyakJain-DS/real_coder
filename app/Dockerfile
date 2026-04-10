@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     python3-setuptools \
     python-is-python3 \
     openjdk-17-jdk \
+    maven \
     wget \
     unzip \
     && rm -rf /var/lib/apt/lists/*
