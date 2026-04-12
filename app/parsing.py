@@ -23,34 +23,44 @@ class TestResult:
 ### Implement the parsing logic below ###
  
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
-    import glob
-    import xml.etree.ElementTree as ET
-
+    """
+    Parse pytest -v output and extract individual test results.
+ 
+    Matches lines of the form:
+        tests/test_pottery_studio.py::ClassName::test_name PASSED [  5%]
+        tests/test_pottery_studio.py::ClassName::test_name FAILED [ 10%]
+    """
+    import re
     results = []
     seen = set()
-
-    for xml_path in glob.glob("/tmp/junit-reports/TEST-*.xml"):
-        try:
-            root = ET.parse(xml_path).getroot()
-            for tc in root.iter("testcase"):
-                classname = tc.get("classname", "")
-                method    = tc.get("name", "")
-                full_name = f"{classname}#{method}" if classname else method
-                if full_name in seen:
-                    continue
-                seen.add(full_name)
-                if tc.find("failure") is not None or tc.find("error") is not None:
-                    status = TestStatus.FAILED
-                elif tc.find("skipped") is not None:
-                    status = TestStatus.SKIPPED
-                else:
-                    status = TestStatus.PASSED
-                results.append(TestResult(name=full_name, status=status))
-        except Exception:
-            pass
-
+ 
+    status_map = {
+        'PASSED':  TestStatus.PASSED,
+        'FAILED':  TestStatus.FAILED,
+        'ERROR':   TestStatus.ERROR,
+        'SKIPPED': TestStatus.SKIPPED,
+    }
+ 
+    # Pytest verbose output format: "<test_id> STATUS [ X%]"
+    pattern = re.compile(
+        r'^(tests/\S+::\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)',
+        re.MULTILINE,
+    )
+ 
+    combined = stdout_content + '\n' + stderr_content
+ 
+    for match in pattern.finditer(combined):
+        name = match.group(1)
+        status_str = match.group(2)
+        if name not in seen:
+            seen.add(name)
+            results.append(TestResult(
+                name=name,
+                status=status_map.get(status_str, TestStatus.ERROR),
+            ))
+ 
     return results
-
+ 
 ### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
 
