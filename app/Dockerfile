@@ -21,8 +21,9 @@ RUN apt-get update && apt-get install -y \
 # PYTHON DEPENDENCIES
 ###############################################
 RUN pip3 install --no-cache-dir \
-    flask==3.0.3 \
-    pytest==8.3.2
+    pytest \
+    pytest-json-report \
+    pytest-rerunfailures
  
 ###############################################
 # WORKING DIRECTORY + GIT SETUP

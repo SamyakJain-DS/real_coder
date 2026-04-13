@@ -8,17 +8,17 @@ run_all_tests() {
   if [ -d /eval_assets/tests ]; then
     # Running inside validation container: tests in /eval_assets, code in /app
     cd /eval_assets
-    PYTHONPATH=/app:${PYTHONPATH:-} python -m pytest tests/ -v --tb=short --no-header 2>&1
+    PYTHONPATH=/app:${PYTHONPATH:-} python -m pytest tests/ -v --tb=short --no-header
   elif [ -d /app/tests ]; then
     # Running inside Docker container with full codebase mounted at /app
     cd /app
-    python -m pytest tests/ -v --tb=short --no-header 2>&1
+    python -m pytest tests/ -v --tb=short --no-header
   else
     # Running locally: use the directory containing this script
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     cd "$SCRIPT_DIR"
     PYTHON=$(command -v python 2>/dev/null || command -v python3)
-    $PYTHON -m pytest tests/ -v --tb=short --no-header 2>&1
+    $PYTHON -m pytest tests/ -v --tb=short --no-header
   fi
 }
 # --- END CONFIGURATION SECTION ---
