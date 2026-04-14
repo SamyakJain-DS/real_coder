@@ -24,17 +24,23 @@ class TestResult:
  
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
-    Parse pytest verbose output and extract individual test results.
+    Parse pytest -v output and extract individual test results.
  
-    Matches lines of the form produced by pytest -v --tb=short --no-header:
-        tests/test_foo.py::ClassName::test_method PASSED  [ 10%]
-        tests/test_foo.py::ClassName::test_method FAILED  [ 20%]
-        tests/test_foo.py::ClassName::test_method SKIPPED [ 30%]
-        tests/test_foo.py::ClassName::test_method ERROR   [ 40%]
+    Pytest -v lines look like:
+      tests/test_zanzibar.py::TestFoo::test_bar PASSED  [ 10%]
+      tests/test_zanzibar.py::TestFoo::test_baz FAILED  [ 20%]
     """
     import re
     results = []
     seen = set()
+ 
+    combined = stdout_content + "\n" + stderr_content
+ 
+    # Match lines like: <test_id> PASSED/FAILED/SKIPPED/ERROR [ n%]
+    pattern = re.compile(
+        r'^([\w/\\.\-]+::[\w:]+)\s+(PASSED|FAILED|SKIPPED|ERROR)',
+        re.MULTILINE,
+    )
  
     status_map = {
         "PASSED": TestStatus.PASSED,
@@ -43,21 +49,13 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
         "ERROR": TestStatus.ERROR,
     }
  
-    # Anchor to start of line; test node IDs contain no whitespace.
-    # The status keyword follows one or more spaces, then optional trailing text.
-    pattern = re.compile(
-        r"^(tests/[^\s]+)\s+(PASSED|FAILED|SKIPPED|ERROR)",
-        re.MULTILINE,
-    )
- 
-    combined = stdout_content + "\n" + stderr_content
- 
     for match in pattern.finditer(combined):
         name = match.group(1)
         status_str = match.group(2)
-        if name not in seen:
-            seen.add(name)
-            results.append(TestResult(name=name, status=status_map[status_str]))
+        if name in seen:
+            continue
+        seen.add(name)
+        results.append(TestResult(name=name, status=status_map[status_str]))
  
     return results
  
