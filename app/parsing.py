@@ -21,41 +21,51 @@ class TestResult:
 
 ### DO NOT MODIFY THE CODE ABOVE ###
 ### Implement the parsing logic below ###
+import re
  
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
     Parse pytest -v output and extract individual test results.
  
-    Pytest -v lines look like:
-      tests/test_zanzibar.py::TestFoo::test_bar PASSED  [ 10%]
-      tests/test_zanzibar.py::TestFoo::test_baz FAILED  [ 20%]
+    Pytest -v line format (the only lines that contain '::' with status at end):
+        tests/test_cli.py::test_name PASSED                         [  X%]
+        tests/test_cli.py::test_name FAILED                         [  X%]
+ 
+    The summary lines at the bottom of the report have the opposite order
+    ("FAILED tests/path::name - reason") and are intentionally excluded by
+    requiring the test path token to come first.
     """
-    import re
     results = []
-    seen = set()
+    seen: set = set()
+ 
+    # Strip ANSI colour codes that pytest emits when it detects a terminal
+    ansi_escape = re.compile(r'\x1b\[[0-9;]*[mK]')
+ 
+    status_map = {
+        'PASSED':  TestStatus.PASSED,
+        'FAILED':  TestStatus.FAILED,
+        'SKIPPED': TestStatus.SKIPPED,
+        'ERROR':   TestStatus.ERROR,
+    }
+ 
+    # Matches:  <file_path>::<test_name>  STATUS  [ X%]
+    # The '::' separator distinguishes test-result lines from all other output.
+    # The percentage progress indicator "[ X%]" is optional.
+    pattern = re.compile(
+        r'^(\S+::\S+)\s+(PASSED|FAILED|SKIPPED|ERROR)\s*(?:\[\s*\d+%\s*\])?\s*$'
+    )
  
     combined = stdout_content + "\n" + stderr_content
  
-    # Match lines like: <test_id> PASSED/FAILED/SKIPPED/ERROR [ n%]
-    pattern = re.compile(
-        r'^([\w/\\.\-]+::[\w:]+)\s+(PASSED|FAILED|SKIPPED|ERROR)',
-        re.MULTILINE,
-    )
- 
-    status_map = {
-        "PASSED": TestStatus.PASSED,
-        "FAILED": TestStatus.FAILED,
-        "SKIPPED": TestStatus.SKIPPED,
-        "ERROR": TestStatus.ERROR,
-    }
- 
-    for match in pattern.finditer(combined):
-        name = match.group(1)
-        status_str = match.group(2)
-        if name in seen:
-            continue
-        seen.add(name)
-        results.append(TestResult(name=name, status=status_map[status_str]))
+    for line in combined.splitlines():
+        clean = ansi_escape.sub('', line).strip()
+        m = pattern.match(clean)
+        if m:
+            name = m.group(1)
+            status_str = m.group(2)
+            if name not in seen:
+                seen.add(name)
+                results.append(TestResult(name=name, status=status_map[status_str]))
  
     return results
  

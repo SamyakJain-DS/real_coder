@@ -4,12 +4,23 @@ set -e
 
 # --- CONFIGURE THIS SECTION ---
 run_all_tests() {
-  echo "Running all tests..."
-  if [ -d /eval_assets/tests ]; then
-    PYTHONPATH=/app python3 -m pytest /eval_assets/tests/ -v --tb=short --no-header 2>&1
-  else
-    PYTHONPATH=/app python3 -m pytest tests/ -v --tb=short --no-header 2>&1
-  fi
+    echo "Running all tests..."
+ 
+    if [ -d /eval_assets/tests ]; then
+        # Running inside validation container: tests in /eval_assets, code in /app
+        cd /eval_assets
+        python -m pytest tests/ -v --tb=short --no-header 2>&1 || true
+    elif [ -d /app/tests ]; then
+        # Running inside Docker container with full codebase mounted at /app
+        cd /app
+        python -m pytest tests/ -v --tb=short --no-header 2>&1 || true
+    else
+        # Running locally: use the directory containing this script
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+        cd "$SCRIPT_DIR"
+        PYTHON=$(command -v python 2>/dev/null || command -v python3)
+        $PYTHON -m pytest tests/ -v --tb=short --no-header 2>&1 || true
+    fi
 }
 # --- END CONFIGURATION SECTION ---
 
