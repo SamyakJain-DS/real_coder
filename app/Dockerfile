@@ -15,22 +15,14 @@ RUN apt-get update && apt-get install -y \
     python3-setuptools \
     python-is-python3 \
     unzip \
-    wget \
     && rm -rf /var/lib/apt/lists/*
  
 ###############################################
-# GO
+# PYTHON DEPENDENCIES
 ###############################################
-RUN wget -q https://go.dev/dl/go1.21.13.linux-amd64.tar.gz -O /tmp/go.tar.gz \
-    && tar -C /usr/local -xzf /tmp/go.tar.gz \
-    && rm /tmp/go.tar.gz
-
-ENV PATH="/usr/local/go/bin:${PATH}"
- 
-###############################################
-# PYTHON TEST DEPENDENCIES
-###############################################
-RUN pip3 install --no-cache-dir pytest
+RUN pip3 install --no-cache-dir \
+    flask \
+    pytest
  
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
