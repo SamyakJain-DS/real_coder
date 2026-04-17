@@ -21,40 +21,43 @@ class TestResult:
 
 ### DO NOT MODIFY THE CODE ABOVE ###
 ### Implement the parsing logic below ###
+
+import re
  
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
     Parse pytest -v output and extract individual test results.
  
-    Pytest -v produces lines of the form:
-        tests/test_bike_workshop.py::ClassName::method_name PASSED [  1%]
-        tests/test_bike_workshop.py::ClassName::method_name FAILED [  2%]
+    pytest -v produces lines of the form:
+        tests/test_optimize_images.py::TestClass::test_name PASSED [ xx%]
+        tests/test_optimize_images.py::TestClass::test_name[param] FAILED [ xx%]
+        tests/test_optimize_images.py::TestClass::test_name ERROR
+        tests/test_optimize_images.py::TestClass::test_name SKIPPED
     """
-    import re
+    results: List[TestResult] = []
+    seen: set = set()
  
     status_map = {
         "PASSED":  TestStatus.PASSED,
         "FAILED":  TestStatus.FAILED,
-        "ERROR":   TestStatus.ERROR,
         "SKIPPED": TestStatus.SKIPPED,
+        "ERROR":   TestStatus.ERROR,
     }
  
-    # Match pytest -v lines: <nodeid> <STATUS> [percentage]
+    # Match a test node id (no spaces, may contain brackets for parametrize)
+    # followed by a status keyword.
     pattern = re.compile(
-        r"^(tests/[^\s]+\.py(?:::[^\s]+)+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
+        r"^(tests/\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
         re.MULTILINE,
     )
  
-    results: List[TestResult] = []
-    seen: set = set()
- 
-    for content in (stdout_content, stderr_content):
-        for match in pattern.finditer(content):
-            name = match.group(1)
-            status_str = match.group(2)
-            if name not in seen:
-                seen.add(name)
-                results.append(TestResult(name=name, status=status_map[status_str]))
+    combined = stdout_content + "\n" + stderr_content
+    for match in pattern.finditer(combined):
+        name   = match.group(1)
+        status = status_map[match.group(2)]
+        if name not in seen:
+            seen.add(name)
+            results.append(TestResult(name=name, status=status))
  
     return results
  

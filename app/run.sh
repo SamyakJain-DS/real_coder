@@ -7,19 +7,20 @@ set -e
 run_all_tests() {
   echo "Running all tests..."
   if [ -d /eval_assets/tests ]; then
-    # Validation context: tests live in /eval_assets, codebase in /app
+    # Running inside the validation container: tests live in /eval_assets,
+    # codebase (optimize_images.py) lives in /app.
     cd /eval_assets
-    PYTHONPATH=/app:${PYTHONPATH:-} python -m pytest tests/ -v --tb=short --no-header
+    PYTHONPATH=/app:${PYTHONPATH:-} python -m pytest tests/ -v --tb=short --no-header 2>&1
   elif [ -d /app/tests ]; then
-    # Docker context with codebase mounted at /app
+    # Running inside a local Docker container with codebase mounted at /app.
     cd /app
-    python -m pytest tests/ -v --tb=short --no-header
+    python -m pytest tests/ -v --tb=short --no-header 2>&1
   else
-    # Local context: run from the directory containing this script
+    # Running directly on the host (e.g. from /codebase).
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     cd "$SCRIPT_DIR"
     PYTHON=$(command -v python 2>/dev/null || command -v python3)
-    $PYTHON -m pytest tests/ -v --tb=short --no-header
+    $PYTHON -m pytest tests/ -v --tb=short --no-header 2>&1
   fi
 }
 # --- END CONFIGURATION SECTION ---
