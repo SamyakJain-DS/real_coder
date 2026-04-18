@@ -21,8 +21,8 @@ RUN apt-get update && apt-get install -y \
 # PYTHON DEPENDENCIES
 ###############################################
 RUN pip3 install --no-cache-dir \
-    "Pillow>=10,<11" \
-    "pytest==8.3.5"
+    pytest==8.3.5 \
+    pyperclip
  
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
