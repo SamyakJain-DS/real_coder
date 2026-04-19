@@ -15,19 +15,22 @@ RUN apt-get update && apt-get install -y \
     python3-setuptools \
     python-is-python3 \
     unzip \
+    curl \
     && rm -rf /var/lib/apt/lists/*
  
-###############################################
-# PYTHON DEPENDENCIES
-###############################################
-RUN pip3 install --no-cache-dir \
-    pytest==8.3.5 \
-    pyperclip
+# Node.js 20 LTS
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+ 
+# Playwright (global) + Chromium browser + all system-level browser dependencies
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npm install -g @playwright/test \
+    && npx playwright install --with-deps chromium
  
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
 ###############################################
-
 WORKDIR /app
 
 RUN git init \
