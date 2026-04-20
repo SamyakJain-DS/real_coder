@@ -22,66 +22,62 @@ class TestResult:
     status: TestStatus
 
 
-### DO NOT MODIFY THE CODE ABOVE ###
+### DO NOT MODIFY THE CODE ABOVE ### 
 ### Implement the parsing logic below ###
- 
-def _extract_specs(suite: dict, path_parts: List[str]) -> List[TestResult]:
-    """
-    Recursively walk a Playwright JSON-reporter suite tree and return one
-    TestResult per test() call (spec).
-    """
-    results = []
- 
-    title = suite.get("title", "")
-    current_parts = path_parts + [title] if title else path_parts
- 
-    for spec in suite.get("specs", []):
-        test_name = " > ".join(current_parts + [spec["title"]])
- 
-        if spec.get("ok", False):
-            status = TestStatus.PASSED
-        else:
-            all_results = [
-                r
-                for t in spec.get("tests", [])
-                for r in t.get("results", [])
-            ]
-            if all_results and all(r.get("status") == "skipped" for r in all_results):
-                status = TestStatus.SKIPPED
-            else:
-                status = TestStatus.FAILED
- 
-        results.append(TestResult(name=test_name, status=status))
- 
-    for child in suite.get("suites", []):
-        results.extend(_extract_specs(child, current_parts))
- 
-    return results
- 
- 
+
+import re
+
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
-    Parse the JSON emitted by `playwright test --reporter=json`.
-    stdout contains only the Playwright JSON (all other output is redirected
-    to stderr in run.sh). Returns an empty list if the output is missing or
-    unparseable (e.g. playwright failed to start on an empty repo).
+    Parse pytest -v output and return one TestResult per discovered test case.
+
+    Pytest verbose line format:
+        tests/path.py::test_name PASSED   [ xx%]
+        tests/path.py::test_name FAILED   [ xx%]
+        tests/path.py::test_name SKIPPED (reason)  [ xx%]
+        tests/path.py::test_name ERROR    [ xx%]
+
+    Falls back to a single ERROR result when pytest fails before reporting
+    any individual test (collection error, import error, etc.).
     """
-    content = stdout_content.strip()
-    if not content:
-        return []
- 
-    try:
-        data = json.loads(content)
-    except json.JSONDecodeError:
-        return []
- 
+    status_map = {
+        "PASSED": TestStatus.PASSED,
+        "FAILED": TestStatus.FAILED,
+        "SKIPPED": TestStatus.SKIPPED,
+        "ERROR": TestStatus.ERROR,
+    }
+
+    # Match: any::path::test_name STATUS [optional percentage]
+    line_re = re.compile(
+        r"^(\S+::(\S+?))\s+(PASSED|FAILED|SKIPPED|ERROR)\b",
+        re.MULTILINE,
+    )
+
     results: List[TestResult] = []
-    for suite in data.get("suites", []):
-        results.extend(_extract_specs(suite, []))
+    seen: set = set()
+
+    for m in line_re.finditer(stdout_content):
+        full_name = m.group(1)
+        if full_name in seen:
+            continue
+        seen.add(full_name)
+        # Use the test node id (file::test_name) as the result name
+        results.append(TestResult(name=full_name, status=status_map[m.group(3)]))
+
+    if not results:
+        # No per-test lines found — pytest failed before/during collection.
+        # Capture the first meaningful error line from stderr or stdout.
+        combined = (stderr_content + "\n" + stdout_content).strip()
+        error_line = next(
+            (ln.strip() for ln in combined.splitlines() if ln.strip()),
+            "session error",
+        )
+        results.append(TestResult(name=error_line[:120], status=TestStatus.ERROR))
+
     return results
- 
+
 ### Implement the parsing logic above ###
-### DO NOT MODIFY THE CODE BELOW ###
+### DO NOT MODIFY THE CODE BELOW ### 
 
 
 def export_to_json(results: List[TestResult], output_path: Path) -> None:

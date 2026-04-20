@@ -17,16 +17,17 @@ RUN apt-get update && apt-get install -y \
     unzip \
     curl \
     && rm -rf /var/lib/apt/lists/*
- 
-# Node.js 20 LTS
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+
+# Install Node.js 22.x (required for the built-in node:sqlite module)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
- 
-# Playwright (global) + Chromium browser + all system-level browser dependencies
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN npm install -g @playwright/test \
-    && npx playwright install --with-deps chromium
+
+# Install global Node.js utilities needed for the app
+RUN npm install -g ts-node typescript
+
+# Install Python test dependencies
+RUN pip3 install pytest requests
  
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
