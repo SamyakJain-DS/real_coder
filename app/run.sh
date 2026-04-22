@@ -3,51 +3,45 @@
 set -e
 
 # --- CONFIGURE THIS SECTION ---
+# Replace this with your command to run all tests
 run_all_tests() {
   echo "Running all tests..."
 
-  # If tests were unzipped flat under /eval_assets (no tests/ subdir),
-  # normalize into /eval_assets/tests/ so that relative imports of the
-  # form `../printManager.js` from a test file still resolve correctly.
-  if ls /eval_assets/test_*.mjs >/dev/null 2>&1 && [ ! -d /eval_assets/tests ]; then
-    mkdir -p /eval_assets/tests
-    mv /eval_assets/test_*.mjs /eval_assets/tests/ 2>/dev/null || true
-    [ -f /eval_assets/package.json ] && mv /eval_assets/package.json /eval_assets/tests/ 2>/dev/null || true
-    [ -f /eval_assets/package-lock.json ] && mv /eval_assets/package-lock.json /eval_assets/tests/ 2>/dev/null || true
+  SCRIPT_PATH="${BASH_SOURCE[0]}"
+  if [ -L "$SCRIPT_PATH" ]; then
+    SCRIPT_PATH="$(readlink -f "$SCRIPT_PATH" 2>/dev/null || readlink "$SCRIPT_PATH")"
   fi
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+  cd "$SCRIPT_DIR"
 
-  # Pick the tests directory. Validation populates /eval_assets; local
-  # runs (with only the codebase mounted) fall back to /app/tests.
-  local tests_dir=""
-  if [ -d /eval_assets/tests ]; then
-    tests_dir=/eval_assets/tests
-    # Place the agent's JS source files one directory above the tests
-    # so `new URL('../printManager.js', import.meta.url)` resolves.
-    find /app -maxdepth 1 -name "*.js" -exec cp {} /eval_assets/ \; 2>/dev/null || true
-  elif [ -d /app/tests ]; then
-    tests_dir=/app/tests
+  if [ -d /eval_assets/tests ] && [ -f /eval_assets/run_tests ]; then
+    # Docker eval: tests in /eval_assets; codebase (app/*) extracted at /app
+    export REAL_CODER_ROOT=/app
+    TESTS_PATH="/eval_assets/tests"
   else
-    echo "No tests directory found (looked in /eval_assets/tests and /app/tests)." >&2
-    return 0
-  fi
-
-  # Expose pre-installed jsdom to the test suite without any runtime install.
-  if [ ! -d "${tests_dir}/node_modules" ] && [ -d /deps/node_modules ]; then
-    cp -r /deps/node_modules "${tests_dir}/node_modules" 2>/dev/null || true
-  fi
-
-  # Run every discovered test file with Node's built-in test runner.
-  # The `|| true` guarantees a non-zero test exit code does not abort run.sh.
-  (
-    cd "$tests_dir"
-    if ls test_*.mjs >/dev/null 2>&1; then
-      node --test test_*.mjs
+    TESTS_PATH="$SCRIPT_DIR/tests"
+    if [ -z "${REAL_CODER_ROOT:-}" ] && [ -d "$SCRIPT_DIR/app" ]; then
+      export REAL_CODER_ROOT="$SCRIPT_DIR"
+    elif [ -z "${REAL_CODER_ROOT:-}" ] && [ -d "$SCRIPT_DIR/codebase/app" ]; then
+      export REAL_CODER_ROOT="$SCRIPT_DIR/codebase"
     else
-      echo "No test files matching test_*.mjs were found in $tests_dir." >&2
+      export REAL_CODER_ROOT="${REAL_CODER_ROOT:-$SCRIPT_DIR}"
     fi
-  ) || true
+  fi
+
+  if command -v python3.11 &>/dev/null; then
+    PYTHON=python3.11
+  elif command -v python3 &>/dev/null; then
+    PYTHON=python3
+  else
+    PYTHON=python
+  fi
+
+  (
+    cd "${REAL_CODER_ROOT:-/app}"
+    PYTHONUNBUFFERED=1 PYTHONPATH="${REAL_CODER_ROOT:-/app}:$PYTHONPATH" "$PYTHON" -m pytest "$TESTS_PATH" -v --tb=short --no-header --rootdir="$SCRIPT_DIR"
+  )
 }
 # --- END CONFIGURATION SECTION ---
-
 ### COMMON EXECUTION; DO NOT MODIFY ###
 run_all_tests
