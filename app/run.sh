@@ -39,7 +39,7 @@ run_all_tests() {
 
   (
     cd "${REAL_CODER_ROOT:-/app}"
-    PYTHONUNBUFFERED=1 PYTHONPATH="${REAL_CODER_ROOT:-/app}:$PYTHONPATH" "$PYTHON" -m pytest "$TESTS_PATH" -v --tb=short --no-header --rootdir="$SCRIPT_DIR"
+    PYTHONUNBUFFERED=1 PYTHONPATH="${REAL_CODER_ROOT:-/app}:$PYTHONPATH" "$PYTHON" -m pytest "$TESTS_PATH" -v --tb=short --no-header --rootdir="$SCRIPT_DIR" -W "ignore::DeprecationWarning" -W "ignore::FutureWarning" -W "ignore::PendingDeprecationWarning"
   )
 }
 # --- END CONFIGURATION SECTION ---
