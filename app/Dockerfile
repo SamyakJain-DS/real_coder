@@ -35,6 +35,53 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     && chmod -R a+w "$RUSTUP_HOME" "$CARGO_HOME"
 
 ###############################################
+# CARGO DEP CACHE (pre-compiled)
+#
+# Pre-build the exact dependency chain the evaluated crate uses
+# (arc-swap + criterion + all transitive deps) into a shared target
+# directory. Both the test runner crate and the user's crate point
+# CARGO_TARGET_DIR at this location, so the heavy criterion build
+# (~30 transitive crates) is compiled once at image-build time
+# rather than on every evaluation.
+#
+# Version pins below mirror the precise pins recorded in the
+# evaluated crate's Cargo.lock so the resolved package set matches
+# and cargo reuses the cached .rlib outputs.
+###############################################
+ENV CARGO_TARGET_DIR=/usr/local/cargo-target
+
+RUN mkdir -p /tmp/warmup/src /tmp/warmup/benches \
+    && cd /tmp/warmup \
+    && printf '%s\n' \
+        '[package]' \
+        'name = "warmup"' \
+        'version = "0.0.1"' \
+        'edition = "2021"' \
+        '' \
+        '[dependencies]' \
+        'arc-swap = "1.7"' \
+        '' \
+        '[dev-dependencies]' \
+        'criterion = "0.5"' \
+        '' \
+        '[[bench]]' \
+        'name = "noop"' \
+        'harness = false' \
+        > Cargo.toml \
+    && echo 'fn main() {}' > benches/noop.rs \
+    && : > src/lib.rs \
+    && cargo generate-lockfile \
+    && cargo update -p clap        --precise 4.4.18 \
+    && cargo update -p half        --precise 2.4.1  \
+    && cargo update -p rayon       --precise 1.10.0 \
+    && cargo update -p rayon-core  --precise 1.12.1 \
+    && cargo bench --no-run \
+    && cargo test  --no-run \
+    && cd / \
+    && rm -rf /tmp/warmup \
+    && chmod -R a+w /usr/local/cargo-target /usr/local/cargo
+
+###############################################
 # WORKING DIRECTORY + GIT SETUP
 ###############################################
 WORKDIR /app

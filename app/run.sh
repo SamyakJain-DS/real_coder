@@ -11,6 +11,12 @@ run_all_tests() {
     # path (mounted at /app by the evaluator). Override only if needed.
     export BLINK_TREE_CRATE="${BLINK_TREE_CRATE:-/app}"
 
+    # The injected codebase may carry a pre-built ./target whose ELF
+    # binaries lost their executable bit during the unzip step. Drop it
+    # so cargo rebuilds cleanly in the container (where new artifacts
+    # land with +x set correctly).
+    rm -rf "${BLINK_TREE_CRATE}/target" 2>/dev/null || true
+
     # Locate the tests directory next to this script first (when run
     # from /eval_assets), then fall back to the canonical location.
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
