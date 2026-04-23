@@ -13,30 +13,76 @@ class TestResult:
     name: str
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
-### Implement the parsing logic below ###
 
 import re
 
-def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
-    """
-    Parse the pytest verbose output and extract test results.
-    """
-    results = []
-    combined = stdout_content + "\n" + stderr_content
-    pattern = re.compile(r'^(tests/\S+::(\S+))\s+(PASSED|FAILED|SKIPPED|ERROR)', re.MULTILINE)
-    for match in pattern.finditer(combined):
-        full_name = match.group(1)
-        status_str = match.group(3)
-        status_map = {
-            "PASSED": TestStatus.PASSED,
-            "FAILED": TestStatus.FAILED,
-            "SKIPPED": TestStatus.SKIPPED,
-            "ERROR": TestStatus.ERROR,
-        }
-        results.append(TestResult(name=full_name, status=status_map[status_str]))
-    return results
+_STATUS_MAP = {
+    'PASSED': TestStatus.PASSED,
+    'FAILED': TestStatus.FAILED,
+    'SKIPPED': TestStatus.SKIPPED,
+    'ERROR': TestStatus.ERROR,
+    'XPASS': TestStatus.PASSED,
+    'XFAIL': TestStatus.FAILED,
+}
 
-### Implement the parsing logic above ###
+# Pytest verbose progress lines:
+#   tests/test_blink_tree.py::test_name PASSED   [ 50%]
+#   tests/test_blink_tree.py::test_name[param] FAILED  [ 50%]
+_PROGRESS_RE = re.compile(
+    r'^(?P<name>\S+::\S+?)\s+'
+    r'(?P<status>PASSED|FAILED|SKIPPED|ERROR|XPASS|XFAIL)\b'
+)
+
+# Pytest short summary block:
+#   FAILED tests/test_blink_tree.py::test_name - reason
+#   ERROR tests/test_blink_tree.py::test_name
+_SUMMARY_RE = re.compile(
+    r'^(?P<status>PASSED|FAILED|SKIPPED|ERROR|XPASS|XFAIL)\s+'
+    r'(?P<name>\S+::\S+)'
+)
+
+# Strip ANSI colour escapes that pytest may emit when stdout is a TTY.
+_ANSI_RE = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
+
+
+def _scan(content: str, results: dict) -> None:
+    for raw in content.splitlines():
+        line = _ANSI_RE.sub('', raw).rstrip()
+        if not line:
+            continue
+        m = _PROGRESS_RE.match(line)
+        if m is None:
+            m = _SUMMARY_RE.match(line)
+        if m is None:
+            continue
+        name = m.group('name')
+        status = _STATUS_MAP.get(m.group('status'))
+        if status is None:
+            continue
+        # Per-test progress lines are authoritative; do not let a later
+        # short-summary line downgrade a result already recorded for the
+        # same test.
+        if name in results and results[name] is not status:
+            # Prefer the more severe outcome so error/failure wins over
+            # a stray duplicate PASSED line.
+            severity = {
+                TestStatus.PASSED: 0,
+                TestStatus.SKIPPED: 1,
+                TestStatus.FAILED: 2,
+                TestStatus.ERROR: 3,
+            }
+            if severity[status] > severity[results[name]]:
+                results[name] = status
+        else:
+            results[name] = status
+
+
+def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
+    results: dict = {}
+    _scan(stdout_content or '', results)
+    _scan(stderr_content or '', results)
+    return [TestResult(name=n, status=s) for n, s in results.items()]
+
 ### DO NOT MODIFY THE CODE BELOW ###
 def export_to_json(results: List[TestResult], output_path: Path) -> None:
     json_results = {'tests': [{'name': r.name, 'status': r.status.name} for r in results]}
