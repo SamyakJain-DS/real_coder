@@ -10,27 +10,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 ###############################################
 RUN apt-get update && apt-get install -y \
     git \
-    software-properties-common \
+    python3 \
+    python3-pip \
+    python3-setuptools \
+    python-is-python3 \
     unzip \
-    && add-apt-repository -y ppa:deadsnakes/ppa \
-    && apt-get update \
-    && apt-get install -y \
-    python3.11 \
-    python3.11-venv \
-    python3.11-distutils \
     && rm -rf /var/lib/apt/lists/*
 
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
-    && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
-
-RUN python3.11 -m ensurepip --upgrade \
-    && python3.11 -m pip install --no-cache-dir \
-        "pytest>=7.0" \
-        pandas \
-        numpy \
-        scikit-learn \
-        matplotlib \
-        seaborn
+###############################################
+# PYTHON DEPENDENCIES
+###############################################
+RUN pip3 install --no-cache-dir flask pytest
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
