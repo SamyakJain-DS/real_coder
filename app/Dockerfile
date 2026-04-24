@@ -21,9 +21,8 @@ RUN apt-get update && apt-get install -y \
 # PYTHON DEPENDENCIES
 ###############################################
 RUN pip3 install --no-cache-dir \
-    pandas==2.2.2 \
-    numpy==1.26.4 \
-    pytest==8.3.2
+    "pandas>=2.0,<3.0" \
+    pytest
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP

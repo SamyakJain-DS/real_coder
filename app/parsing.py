@@ -30,9 +30,12 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
     seen = set()
  
     # Match: <test_id> <STATUS> [ nn%]
-    # The test id may contain :: separators and spaces before the status keyword.
+    # The test id is a path ending in .py followed by ::node ids. Pytest may
+    # emit it relative to its rootdir (e.g. "tests/...") or relative to the
+    # invocation cwd (e.g. "../eval_assets/tests/..."), so the path prefix is
+    # not fixed.
     pattern = re.compile(
-        r"^(tests/\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)\s*\[",
+        r"^(\S*?tests/\S+\.py::\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)\s*\[",
         re.MULTILINE,
     )
  
@@ -48,6 +51,12 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
     for match in pattern.finditer(combined):
         name   = match.group(1).strip()
         status = status_map[match.group(2)]
+        # Normalize so the same test reported from different cwds (e.g.
+        # "../eval_assets/tests/x.py::t" vs "tests/x.py::t") collapses to a
+        # single canonical id. Strip everything before the first "tests/".
+        idx = name.find("tests/")
+        if idx > 0:
+            name = name[idx:]
         if name not in seen:
             seen.add(name)
             results.append(TestResult(name=name, status=status))
