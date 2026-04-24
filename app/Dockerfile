@@ -16,13 +16,19 @@ RUN apt-get update && apt-get install -y \
     python-is-python3 \
     unzip \
     && rm -rf /var/lib/apt/lists/*
- 
+
 ###############################################
 # PYTHON DEPENDENCIES
+# The donor_pipeline package depends on pandas, numpy and scikit-learn
+# (pinned to the versions mandated by the prompt's requirements.txt).
+# pytest is installed solely to execute the test suite; it is never
+# imported by donor_pipeline.
 ###############################################
 RUN pip3 install --no-cache-dir \
-    "pandas>=2.0,<3.0" \
-    pytest
+    pytest \
+    pandas==2.2.2 \
+    numpy==1.26.4 \
+    scikit-learn==1.5.0
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP

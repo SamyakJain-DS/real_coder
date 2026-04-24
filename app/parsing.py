@@ -14,52 +14,47 @@ class TestResult:
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
 ### Implement the parsing logic below ###
+
 import re
  
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
     Parse pytest -v output and extract individual test results.
  
-    Pytest -v emits lines of the form:
-        tests/test_pipeline.py::TestClass::test_name PASSED  [ 42%]
-        tests/test_pipeline.py::TestClass::test_name FAILED  [ 43%]
-        tests/test_pipeline.py::TestClass::test_name ERROR   [ 44%]
-        tests/test_pipeline.py::TestClass::test_name SKIPPED [ 45%]
-    """
-    results = []
-    seen = set()
+    Pytest -v emits one result line per test in this format:
+        tests/path/to/test_file.py::TestClass::test_name[param] STATUS [  N%]
  
-    # Match: <test_id> <STATUS> [ nn%]
-    # The test id is a path ending in .py followed by ::node ids. Pytest may
-    # emit it relative to its rootdir (e.g. "tests/...") or relative to the
-    # invocation cwd (e.g. "../eval_assets/tests/..."), so the path prefix is
-    # not fixed.
-    pattern = re.compile(
-        r"^(\S*?tests/\S+\.py::\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)\s*\[",
-        re.MULTILINE,
-    )
+    The STATUS token is one of: PASSED, FAILED, SKIPPED, ERROR.
+    Parametrized test IDs (e.g. [donor_id], [kwargs0]) are part of the
+    non-whitespace test-name token and are captured as-is.
+    """
+    results: List[TestResult] = []
+    seen: set = set()
  
     status_map = {
         "PASSED":  TestStatus.PASSED,
         "FAILED":  TestStatus.FAILED,
-        "ERROR":   TestStatus.ERROR,
         "SKIPPED": TestStatus.SKIPPED,
+        "ERROR":   TestStatus.ERROR,
     }
  
-    combined = stdout_content + "\n" + stderr_content
+    # Match lines produced by pytest -v during the test run:
+    #   <test_id> <STATUS> [  N%]
+    # <test_id> is a single non-whitespace token that includes "::" separators
+    # and optional parametrize brackets, e.g.:
+    #   tests/test_foo.py::TestClass::test_bar[param] PASSED [ 42%]
+    pattern = re.compile(
+        r"^(\S+::\S+)\s+(PASSED|FAILED|SKIPPED|ERROR)\b",
+        re.MULTILINE,
+    )
  
+    combined = stdout_content + "\n" + stderr_content
     for match in pattern.finditer(combined):
-        name   = match.group(1).strip()
-        status = status_map[match.group(2)]
-        # Normalize so the same test reported from different cwds (e.g.
-        # "../eval_assets/tests/x.py::t" vs "tests/x.py::t") collapses to a
-        # single canonical id. Strip everything before the first "tests/".
-        idx = name.find("tests/")
-        if idx > 0:
-            name = name[idx:]
+        name = match.group(1)
+        status_str = match.group(2)
         if name not in seen:
             seen.add(name)
-            results.append(TestResult(name=name, status=status))
+            results.append(TestResult(name=name, status=status_map[status_str]))
  
     return results
  
