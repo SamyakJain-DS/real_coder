@@ -21,7 +21,7 @@ RUN pip3 install \
     pandas==2.0.3 \
     numpy==1.24.4 \
     scipy==1.11.4 \
-    pytest==8.1.1 \
+    pytest==8.1.1
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
