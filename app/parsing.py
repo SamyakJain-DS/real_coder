@@ -18,11 +18,9 @@ class TestResult:
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     import re
     results = []
-    seen = set()
-
     pattern_std = re.compile(r'^(\S+::\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)')
     pattern_xdist = re.compile(r'^\[gw\d+\]\s+\[.*?\]\s+(PASSED|FAILED|ERROR|SKIPPED)\s+(\S+::\S+)')
-
+    seen = set()
     for line in stdout_content.splitlines():
         line = line.strip()
         m = pattern_std.match(line)
@@ -38,7 +36,6 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
             continue
         seen.add(name)
         results.append(TestResult(name=name, status=TestStatus[status_str]))
-
     return results
 
 ### Implement the parsing logic above ###
