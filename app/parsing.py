@@ -15,49 +15,32 @@ class TestResult:
 ### DO NOT MODIFY THE CODE ABOVE ###
 ### Implement the parsing logic below ###
 
-import re
- 
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
-    """
-    Parse pytest -v output and extract individual test results.
- 
-    Pytest -v emits one result line per test in this format:
-        tests/path/to/test_file.py::TestClass::test_name[param] STATUS [  N%]
- 
-    The STATUS token is one of: PASSED, FAILED, SKIPPED, ERROR.
-    Parametrized test IDs (e.g. [donor_id], [kwargs0]) are part of the
-    non-whitespace test-name token and are captured as-is.
-    """
-    results: List[TestResult] = []
-    seen: set = set()
- 
-    status_map = {
-        "PASSED":  TestStatus.PASSED,
-        "FAILED":  TestStatus.FAILED,
-        "SKIPPED": TestStatus.SKIPPED,
-        "ERROR":   TestStatus.ERROR,
-    }
- 
-    # Match lines produced by pytest -v during the test run:
-    #   <test_id> <STATUS> [  N%]
-    # <test_id> is a single non-whitespace token that includes "::" separators
-    # and optional parametrize brackets, e.g.:
-    #   tests/test_foo.py::TestClass::test_bar[param] PASSED [ 42%]
-    pattern = re.compile(
-        r"^(\S+::\S+)\s+(PASSED|FAILED|SKIPPED|ERROR)\b",
-        re.MULTILINE,
-    )
- 
-    combined = stdout_content + "\n" + stderr_content
-    for match in pattern.finditer(combined):
-        name = match.group(1)
-        status_str = match.group(2)
-        if name not in seen:
-            seen.add(name)
-            results.append(TestResult(name=name, status=status_map[status_str]))
- 
+    import re
+    results = []
+    seen = set()
+
+    pattern_std = re.compile(r'^(\S+::\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)')
+    pattern_xdist = re.compile(r'^\[gw\d+\]\s+\[.*?\]\s+(PASSED|FAILED|ERROR|SKIPPED)\s+(\S+::\S+)')
+
+    for line in stdout_content.splitlines():
+        line = line.strip()
+        m = pattern_std.match(line)
+        if m:
+            name, status_str = m.group(1), m.group(2)
+        else:
+            m = pattern_xdist.match(line)
+            if m:
+                status_str, name = m.group(1), m.group(2)
+            else:
+                continue
+        if name in seen:
+            continue
+        seen.add(name)
+        results.append(TestResult(name=name, status=TestStatus[status_str]))
+
     return results
- 
+
 ### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
 def export_to_json(results: List[TestResult], output_path: Path) -> None:

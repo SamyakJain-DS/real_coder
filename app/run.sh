@@ -2,24 +2,30 @@
 ### COMMON SETUP; DO NOT MODIFY ###
 set -e
 # --- CONFIGURE THIS SECTION ---
+
 run_all_tests() {
-  echo "Running all tests..."
-  if [ -d /eval_assets/tests ]; then
-    # Running inside the validation container:
-    # tests live in /eval_assets/tests, codebase lives in /app
-    cd /eval_assets
-    PYTHONPATH=/app:${PYTHONPATH:-} python -m pytest tests/ -v --tb=short -W ignore 2>&1 || true
-  elif [ -d /app/tests ]; then
-    # Running inside a plain Docker container with the full codebase at /app
-    cd /app
-    python -m pytest tests/ -v --tb=short -W ignore 2>&1 || true
+  if [ -d /eval_assets ] && [ -n "$(find /eval_assets -maxdepth 2 -name 'test_*.py' 2>/dev/null | head -1)" ]; then
+    TESTS_DIR="/eval_assets/tests"
+    APP_DIR="/app"
+    SCRIPT_DIR="/eval_assets"
+    if [ -d "$APP_DIR/data" ] && [ ! -e "$SCRIPT_DIR/data" ]; then
+      ln -sf "$APP_DIR/data" "$SCRIPT_DIR/data"
+    fi
+    if [ -f "$APP_DIR/pyproject.toml" ] && [ ! -e "$SCRIPT_DIR/pyproject.toml" ]; then
+      ln -sf "$APP_DIR/pyproject.toml" "$SCRIPT_DIR/pyproject.toml"
+    fi
   else
-    # Fallback: resolve the directory that contains this script and run from there
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    cd "$SCRIPT_DIR"
-    PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}" python -m pytest tests/ -v --tb=short -W ignore 2>&1 || true
+    APP_DIR="$SCRIPT_DIR"
+    TESTS_DIR="$SCRIPT_DIR/tests"
   fi
+
+  ROOTDIR="$(dirname "$TESTS_DIR")"
+
+  PYTHONPATH="$APP_DIR${PYTHONPATH:+:$PYTHONPATH}" python -m pytest "$TESTS_DIR" \
+    --rootdir="$ROOTDIR" -v --tb=short --no-header -p no:cacheprovider || true
 }
+
 # --- END CONFIGURATION SECTION ---
 ### COMMON EXECUTION; DO NOT MODIFY ###
 run_all_tests
