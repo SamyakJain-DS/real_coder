@@ -2,64 +2,33 @@
 ### COMMON SETUP; DO NOT MODIFY ###
 set -e
 # --- CONFIGURE THIS SECTION ---
+# Replace with your command to run all tests
 run_all_tests() {
-  echo "Running all tests..."
+    # Make the cargo toolchain installed by the Dockerfile reachable.
+    export PATH="/usr/local/cargo/bin:${HOME}/.cargo/bin:${PATH}"
 
-  # Determine working directory
-  if [ -d "/eval_assets" ] && [ "$(pwd)" = "/eval_assets" ]; then
-    APP_DIR="/eval_assets"
-  else
-    APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  fi
+    # The pytest suite resolves the user's blink_tree crate from this
+    # path (mounted at /app by the evaluator). Override only if needed.
+    export BLINK_TREE_CRATE="${BLINK_TREE_CRATE:-/app}"
 
-  # Copy codebase into eval_assets if running in container
-  if [ -d "/app" ] && [ "$APP_DIR" = "/eval_assets" ]; then
-    cp -a /app/. "$APP_DIR/" 2>/dev/null || true
-  fi
+    # Steer all cargo subprocesses to a writable target dir outside the
+    # injected codebase. Any ./target that ships inside the submission
+    # (whose ELF binaries lose +x during the unzip step) is then simply
+    # ignored, and the codebase tree is never written to from run.sh.
+    export CARGO_TARGET_DIR="/tmp/blink_tree_target"
 
-  cd "$APP_DIR"
-
-  SPRING_PID=""
-
-  # Build and start Spring Boot if source exists
-  if [ -f "pom.xml" ] && [ -d "src" ]; then
-    echo "Building Spring Boot application..."
-    rm -rf data
-    mkdir -p data
-    mvn clean package -q -DskipTests 2>/dev/null || mvn clean package -DskipTests 2>&1 | tail -20
-
-    JAR=$(ls target/rentalyard-*.jar 2>/dev/null | head -1)
-    if [ -n "$JAR" ]; then
-      echo "Starting Spring Boot application..."
-      java -Xms256m -Xmx512m -jar "$JAR" \
-        --spring.datasource.url="jdbc:h2:file:./data/rentalyard" \
-        --spring.jpa.open-in-view=false \
-        > /tmp/spring_boot.log 2>&1 &
-      SPRING_PID=$!
-
-      echo "Waiting for application to start (up to 60 seconds)..."
-      for i in $(seq 1 30); do
-        if curl -sf http://localhost:8080/api/config/member-discount > /dev/null 2>&1; then
-          echo "Application started after $((i * 2)) seconds"
-          break
-        fi
-        sleep 2
-      done
+    # Locate the tests directory next to this script first (when run
+    # from /eval_assets), then fall back to the canonical location.
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -d "${SCRIPT_DIR}/tests" ]; then
+        TESTS_DIR="${SCRIPT_DIR}/tests"
+    elif [ -d "/eval_assets/tests" ]; then
+        TESTS_DIR="/eval_assets/tests"
     else
-      echo "Build succeeded but JAR not found"
+        TESTS_DIR="tests"
     fi
-  else
-    echo "No source code found - running tests against (likely absent) server"
-  fi
 
-  # Run the test suite
-  python3 "$APP_DIR/tests/run_tests.py" || true
-
-  # Shut down Spring Boot
-  if [ -n "$SPRING_PID" ]; then
-    kill "$SPRING_PID" 2>/dev/null || true
-    wait "$SPRING_PID" 2>/dev/null || true
-  fi
+    python3 -m pytest -v --tb=short -p no:cacheprovider "${TESTS_DIR}"
 }
 # --- END CONFIGURATION SECTION ---
 ### COMMON EXECUTION; DO NOT MODIFY ###
