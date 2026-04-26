@@ -15,28 +15,38 @@ class TestResult:
 ### DO NOT MODIFY THE CODE ABOVE ###
 ### Implement the parsing logic below ###
 
+import re
+
+STATUS_LINE = re.compile(r"^\s*(PASSED|FAILED|SKIPPED|ERROR)\s+(\S.*?)\s*$")
+
+STATUS_TO_ENUM = {
+    "PASSED": TestStatus.PASSED,
+    "FAILED": TestStatus.FAILED,
+    "SKIPPED": TestStatus.SKIPPED,
+    "ERROR": TestStatus.ERROR,
+}
+
+
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
-    import re
-    results = []
-    pattern_std = re.compile(r'^(\S+::\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)')
-    pattern_xdist = re.compile(r'^\[gw\d+\]\s+\[.*?\]\s+(PASSED|FAILED|ERROR|SKIPPED)\s+(\S+::\S+)')
-    seen = set()
-    for line in stdout_content.splitlines():
-        line = line.strip()
-        m = pattern_std.match(line)
-        if m:
-            name, status_str = m.group(1), m.group(2)
-        else:
-            m = pattern_xdist.match(line)
-            if m:
-                status_str, name = m.group(1), m.group(2)
-            else:
-                continue
-        if name in seen:
+    """
+    Parse the runner's output and return one TestResult per status line found.
+
+    The runner prints lines of the form '  PASSED <name>' or '  FAILED <name>'.
+    SKIPPED/ERROR are recognised too so the parser stays faithful to the
+    four-state TestStatus enum if the runner ever emits them. Tests that do
+    not appear in the output are simply omitted; downstream validation is
+    responsible for any normalisation across the four states.
+    """
+    seen = {}
+    for line in (stdout_content + "\n" + stderr_content).splitlines():
+        match = STATUS_LINE.match(line)
+        if not match:
             continue
-        seen.add(name)
-        results.append(TestResult(name=name, status=TestStatus[status_str]))
-    return results
+        status_word, name = match.group(1), match.group(2).strip()
+        if name and name not in seen:
+            seen[name] = STATUS_TO_ENUM[status_word]
+
+    return [TestResult(name=name, status=status) for name, status in seen.items()]
 
 ### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###

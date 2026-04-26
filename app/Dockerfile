@@ -15,11 +15,12 @@ RUN apt-get update && apt-get install -y \
     python3-setuptools \
     python-is-python3 \
     unzip \
+    curl \
+    openjdk-17-jdk \
+    maven \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install \
-    click==8.3.2 \
-    pytest==8.1.1
+RUN pip3 install --no-cache-dir requests
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
