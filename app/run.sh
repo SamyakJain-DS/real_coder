@@ -24,6 +24,7 @@ run_all_tests() {
   # Build and start Spring Boot if source exists
   if [ -f "pom.xml" ] && [ -d "src" ]; then
     echo "Building Spring Boot application..."
+    rm -rf data
     mkdir -p data
     mvn clean package -q -DskipTests 2>/dev/null || mvn clean package -DskipTests 2>&1 | tail -20
 
