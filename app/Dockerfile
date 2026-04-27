@@ -21,8 +21,9 @@ RUN apt-get update && apt-get install -y \
 # PYTHON DEPENDENCIES
 ###############################################
 RUN pip3 install --no-cache-dir \
-    "numpy>=1.24" \
-    "scipy>=1.11" \
+    "pandas>=2.2" \
+    "numpy>=1.26" \
+    "scikit-learn>=1.4" \
     pytest
 
 ###############################################

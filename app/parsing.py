@@ -16,15 +16,15 @@ class TestResult:
 ### Implement the parsing logic below ###
 
 import re
- 
+
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
     Parse pytest -v output and extract individual test results.
- 
+
     Pytest verbose output lines have the form:
-        tests/test_online_ml.py::TestClass::test_method PASSED [  1%]
-        tests/test_online_ml.py::TestClass::test_method FAILED [  2%]
- 
+        tests/test_fertility_pipeline.py::TestClass::test_method PASSED [  1%]
+        tests/test_fertility_pipeline.py::TestClass::test_method FAILED [  2%]
+
     The regex matches any line that begins with a .py test path containing
     at least one :: separator, followed by a whitespace-separated status word.
     Lines are deduplicated so that the summary block at the end of pytest
@@ -36,18 +36,18 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
         "ERROR": TestStatus.ERROR,
         "SKIPPED": TestStatus.SKIPPED,
     }
- 
+
     # Match lines like:
-    #   tests/test_online_ml.py::TestClass::test_method PASSED [  1%]
+    #   tests/test_fertility_pipeline.py::TestClass::test_method PASSED [  1%]
     # Requires a .py path with at least one :: node separator, then a status word.
     pattern = re.compile(
         r"^(\S+\.py(?:::\S+)+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
         re.MULTILINE,
     )
- 
+
     results: List[TestResult] = []
     seen: set = set()
- 
+
     combined = stdout_content + "\n" + stderr_content
     for match in pattern.finditer(combined):
         name = match.group(1)
@@ -55,9 +55,9 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
         if name not in seen:
             seen.add(name)
             results.append(TestResult(name=name, status=status_map[status_str]))
- 
+
     return results
- 
+
 ### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
 def export_to_json(results: List[TestResult], output_path: Path) -> None:
