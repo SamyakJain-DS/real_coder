@@ -17,46 +17,69 @@ class TestResult:
 
 import re
 
+# Map the verbose-mode keywords pytest prints next to each test id.
+_STATUS_MAP = {
+    "PASSED": TestStatus.PASSED,
+    "FAILED": TestStatus.FAILED,
+    "SKIPPED": TestStatus.SKIPPED,
+    "ERROR": TestStatus.ERROR,
+    "XFAIL": TestStatus.PASSED,
+    "XPASS": TestStatus.PASSED,
+    "XFAILED": TestStatus.PASSED,
+    "XPASSED": TestStatus.PASSED,
+}
+
+# Lines look like: "tests/test_pipeline.py::test_name PASSED [ 12%]" or
+# "/eval_assets/tests/test_pipeline.py::test_name FAILED".
+_VERBOSE_RE = re.compile(
+    r"^(?P<name>\S+::\S+?)\s+"
+    r"(?P<status>PASSED|FAILED|ERROR|SKIPPED|XFAILED|XPASSED|XFAIL|XPASS)"
+    r"(?:\s|$)"
+)
+
+# Short summary lines look like: "FAILED tests/test_pipeline.py::test_name - ..."
+_SUMMARY_RE = re.compile(
+    r"^(?P<status>PASSED|FAILED|ERROR|SKIPPED|XFAILED|XPASSED|XFAIL|XPASS)\s+"
+    r"(?P<name>\S+::\S+)"
+)
+
+
+def _normalize_name(name: str) -> str:
+    """Strip pytest parametrize trailing whitespace / odd characters."""
+    return name.strip()
+
+
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
-    Parse pytest -v output and extract individual test results.
+    Parse the test output content and extract test results.
 
-    Pytest verbose output lines have the form:
-        tests/test_fertility_pipeline.py::TestClass::test_method PASSED [  1%]
-        tests/test_fertility_pipeline.py::TestClass::test_method FAILED [  2%]
-
-    The regex matches any line that begins with a .py test path containing
-    at least one :: separator, followed by a whitespace-separated status word.
-    Lines are deduplicated so that the summary block at the end of pytest
-    output does not produce duplicate entries.
+    Reads pytest's verbose per-test status lines as well as the short
+    summary block. Later observations of a given test override earlier
+    ones, so the short summary (printed last) is authoritative when
+    available.
     """
-    status_map = {
-        "PASSED": TestStatus.PASSED,
-        "FAILED": TestStatus.FAILED,
-        "ERROR": TestStatus.ERROR,
-        "SKIPPED": TestStatus.SKIPPED,
-    }
+    seen = {}
+    combined = (stdout_content or "") + "\n" + (stderr_content or "")
 
-    # Match lines like:
-    #   tests/test_fertility_pipeline.py::TestClass::test_method PASSED [  1%]
-    # Requires a .py path with at least one :: node separator, then a status word.
-    pattern = re.compile(
-        r"^(\S+\.py(?:::\S+)+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
-        re.MULTILINE,
-    )
+    for raw in combined.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
 
-    results: List[TestResult] = []
-    seen: set = set()
+        m = _VERBOSE_RE.match(line)
+        if m:
+            seen[_normalize_name(m.group("name"))] = _STATUS_MAP.get(
+                m.group("status"), TestStatus.FAILED
+            )
+            continue
 
-    combined = stdout_content + "\n" + stderr_content
-    for match in pattern.finditer(combined):
-        name = match.group(1)
-        status_str = match.group(2)
-        if name not in seen:
-            seen.add(name)
-            results.append(TestResult(name=name, status=status_map[status_str]))
+        m = _SUMMARY_RE.match(line)
+        if m:
+            seen[_normalize_name(m.group("name"))] = _STATUS_MAP.get(
+                m.group("status"), TestStatus.FAILED
+            )
 
-    return results
+    return [TestResult(name=n, status=s) for n, s in seen.items()]
 
 ### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###

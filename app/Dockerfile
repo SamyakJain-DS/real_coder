@@ -16,14 +16,12 @@ RUN apt-get update && apt-get install -y \
     python-is-python3 \
     unzip \
     && rm -rf /var/lib/apt/lists/*
- 
-###############################################
-# PYTHON DEPENDENCIES
-###############################################
+
+# Python dependencies for the Early Intervention pipeline and its test suite.
 RUN pip3 install --no-cache-dir \
-    "pandas>=2.2" \
-    "numpy>=1.26" \
-    "scikit-learn>=1.4" \
+    pandas \
+    numpy \
+    scikit-learn \
     pytest
 
 ###############################################
