@@ -3,22 +3,23 @@
 set -e
 # --- CONFIGURE THIS SECTION ---
 run_all_tests() {
-  echo "Running all tests..."
-  if [ -d /eval_assets/tests ]; then
-    # Running inside the validation container: tests in /eval_assets, code in /app
-    cd /eval_assets
-    PYTHONPATH=/app:${PYTHONPATH:-} python -m pytest tests/ -v --tb=short --no-header
-  elif [ -d /app/tests ]; then
-    # Running inside Docker container with full codebase mounted at /app
-    cd /app
-    PYTHONPATH=/app:${PYTHONPATH:-} python -m pytest tests/ -v --tb=short --no-header
+  if [ -n "${BASH_SOURCE[0]:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")" && pwd)"
   else
-    # Running locally: resolve paths relative to this script's directory
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    cd "$SCRIPT_DIR"
-    PYTHON=$(command -v python 2>/dev/null || command -v python3)
-    PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}" $PYTHON -m pytest tests/ -v --tb=short --no-header
+    SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
   fi
+
+  TEST_DIR="$SCRIPT_DIR"
+  if [ -d "$SCRIPT_DIR/tests" ]; then
+    TEST_DIR="$SCRIPT_DIR/tests"
+  fi
+
+  export PYTHONPATH="/app:${PYTHONPATH:-}"
+
+  cd "$TEST_DIR"
+  # Emit pytest's verbose per-test status so parsing.py can convert each
+  # "<nodeid> PASSED|FAILED|SKIPPED [pct%]" line into a structured entry.
+  python3 -m pytest --no-header --tb=no -v --color=no -p no:cacheprovider || true
 }
 # --- END CONFIGURATION SECTION ---
 ### COMMON EXECUTION; DO NOT MODIFY ###

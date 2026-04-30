@@ -17,69 +17,108 @@ class TestResult:
 
 import re
 
-# Map the verbose-mode keywords pytest prints next to each test id.
-_STATUS_MAP = {
+_RESULT_PATTERN = re.compile(r"^(PASSED|FAILED|SKIPPED|ERROR)\s+(.+)$")
+
+# Pytest's verbose reporter prints one line per test of the form
+#   <nodeid> <STATUS> [ pct%]
+# where <nodeid> is e.g. "tests/test_embeddable_webdav.py::test_t001_xyz".
+# The trailing "[ pct%]" suffix is optional (e.g. when only one test
+# is collected the percentage column is sometimes omitted on resumed
+# runs). We accept it either way so the parser remains tolerant of
+# slight formatting variations between pytest versions.
+_PYTEST_PATTERN = re.compile(
+    r"^(?P<name>\S.*?)\s+(?P<status>PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)"
+    r"(?:\s+\[\s*\d+%\s*\])?\s*$"
+)
+
+_PYTEST_STATUS_MAP = {
     "PASSED": TestStatus.PASSED,
-    "FAILED": TestStatus.FAILED,
-    "SKIPPED": TestStatus.SKIPPED,
-    "ERROR": TestStatus.ERROR,
-    "XFAIL": TestStatus.PASSED,
     "XPASS": TestStatus.PASSED,
-    "XFAILED": TestStatus.PASSED,
-    "XPASSED": TestStatus.PASSED,
+    "FAILED": TestStatus.FAILED,
+    "ERROR": TestStatus.ERROR,
+    "SKIPPED": TestStatus.SKIPPED,
+    "XFAIL": TestStatus.SKIPPED,
 }
 
-# Lines look like: "tests/test_pipeline.py::test_name PASSED [ 12%]" or
-# "/eval_assets/tests/test_pipeline.py::test_name FAILED".
-_VERBOSE_RE = re.compile(
-    r"^(?P<name>\S+::\S+?)\s+"
-    r"(?P<status>PASSED|FAILED|ERROR|SKIPPED|XFAILED|XPASSED|XFAIL|XPASS)"
-    r"(?:\s|$)"
-)
 
-# Short summary lines look like: "FAILED tests/test_pipeline.py::test_name - ..."
-_SUMMARY_RE = re.compile(
-    r"^(?P<status>PASSED|FAILED|ERROR|SKIPPED|XFAILED|XPASSED|XFAIL|XPASS)\s+"
-    r"(?P<name>\S+::\S+)"
-)
+def _parse_pytest_verbose(stdout_content: str) -> List[TestResult]:
+    """Parse pytest's `--reporter=verbose` output (one status per test).
 
+    Each per-test line looks like::
 
-def _normalize_name(name: str) -> str:
-    """Strip pytest parametrize trailing whitespace / odd characters."""
-    return name.strip()
+        tests/test_embeddable_webdav.py::test_t001_xyz PASSED [  1%]
 
-
-def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
+    Section banners and traceback text are filtered out by requiring the
+    line to contain a recognised status token in the expected position.
+    Returns an empty list when no per-test lines were found so the caller
+    can fall back to a different parser.
     """
-    Parse the test output content and extract test results.
+    results: List[TestResult] = []
+    for line in stdout_content.splitlines():
+        stripped = line.rstrip()
+        if not stripped:
+            continue
+        match = _PYTEST_PATTERN.match(stripped)
+        if not match:
+            continue
+        name = match.group("name").strip()
+        # Reject banner-style "STATUS message" lines and pytest's summary
+        # blocks (e.g. "FAILED tests/test_x.py::test_y - AssertionError"),
+        # neither of which represents a per-test status row.
+        if not name or name.startswith(("=", "-", "_")):
+            continue
+        if "::" not in name:
+            continue
+        status = _PYTEST_STATUS_MAP.get(match.group("status"), TestStatus.FAILED)
+        results.append(TestResult(name=name, status=status))
+    return results
 
-    Reads pytest's verbose per-test status lines as well as the short
-    summary block. Later observations of a given test override earlier
-    ones, so the short summary (printed last) is authoritative when
-    available.
+
+def _parse_status_lines(stdout_content: str) -> List[TestResult]:
+    """Parse '<STATUS> <name>' lines (legacy pytest-style verbose output)."""
+    results: List[TestResult] = []
+    for line in stdout_content.splitlines():
+        match = _RESULT_PATTERN.match(line)
+        if match:
+            status_str, name = match.groups()
+            status = (
+                TestStatus.PASSED
+                if status_str == "PASSED"
+                else TestStatus.FAILED
+            )
+            results.append(TestResult(name=name.strip(), status=status))
+    return results
+
+
+def parse_test_output(
+    stdout_content: str, stderr_content: str
+) -> List[TestResult]:
+    """Parse captured pytest stdout into a list of TestResult.
+
+    Two input formats are supported:
+
+      1. Pytest's verbose reporter ('<nodeid> <STATUS> [pct%]'). This is
+         what the project's run.sh emits today.
+      2. '<STATUS> <name>' lines, retained for backwards compatibility
+         with prior run.sh variants that post-processed pytest output.
+
+    The verbose-reporter parser runs first; if zero per-test rows match,
+    the line-based parser runs as a fallback.
     """
-    seen = {}
-    combined = (stdout_content or "") + "\n" + (stderr_content or "")
+    # Tolerate an optional UTF-8 BOM at the start of the captured stdout.
+    # On Linux (the production runtime) Python's default encoding is UTF-8
+    # and the BOM decodes as a single '\ufeff' character. On Windows the
+    # default encoding is cp1252 and the same three BOM bytes (ef bb bf)
+    # decode as the mojibake sequence 'ï»¿'. Strip either form.
+    if stdout_content.startswith("\ufeff"):
+        stdout_content = stdout_content[1:]
+    elif stdout_content.startswith("\u00ef\u00bb\u00bf"):
+        stdout_content = stdout_content[3:]
+    results = _parse_pytest_verbose(stdout_content)
+    if results:
+        return results
+    return _parse_status_lines(stdout_content)
 
-    for raw in combined.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-
-        m = _VERBOSE_RE.match(line)
-        if m:
-            seen[_normalize_name(m.group("name"))] = _STATUS_MAP.get(
-                m.group("status"), TestStatus.FAILED
-            )
-            continue
-
-        m = _SUMMARY_RE.match(line)
-        if m:
-            seen[_normalize_name(m.group("name"))] = _STATUS_MAP.get(
-                m.group("status"), TestStatus.FAILED
-            )
-
-    return [TestResult(name=n, status=s) for n, s in seen.items()]
 
 ### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
