@@ -13,37 +13,48 @@ class TestResult:
     name: str
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
+### Implement the parsing logic below ###
 
 import re
-
-_PYTEST_LINE = re.compile(
-    r"^(?P<name>\S.*?::\S+?)\s+(?P<status>PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)"
-    r"(?:\s+\[\s*\d+%\s*\])?\s*$"
-)
-
-_STATUS_MAP = {
-    "PASSED": TestStatus.PASSED,
-    "XPASS":  TestStatus.PASSED,
-    "FAILED": TestStatus.FAILED,
-    "ERROR":  TestStatus.ERROR,
-    "SKIPPED": TestStatus.SKIPPED,
-    "XFAIL":  TestStatus.SKIPPED,
-}
-
-
+ 
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
-    results: List[TestResult] = []
-    for line in stdout_content.splitlines():
-        line = line.rstrip()
-        if not line or line[0] in "=-_":
-            continue
-        m = _PYTEST_LINE.match(line)
-        if not m:
-            continue
-        name = m.group("name").strip()
-        results.append(TestResult(name=name, status=_STATUS_MAP[m.group("status")]))
+    """
+    Parse pytest -v output and return one TestResult per test.
+ 
+    Pytest verbose output lines have the form:
+        tests/path/to/test.py::Class::test_name STATUS [ N%]
+    where STATUS is PASSED, FAILED, SKIPPED, or ERROR.
+ 
+    Both stdout and stderr are scanned so nothing is missed regardless of
+    how the test runner routes its output.
+    """
+    results = []
+    seen = set()
+ 
+    status_map = {
+        "PASSED":  TestStatus.PASSED,
+        "FAILED":  TestStatus.FAILED,
+        "SKIPPED": TestStatus.SKIPPED,
+        "ERROR":   TestStatus.ERROR,
+    }
+ 
+    pattern = re.compile(
+        r"^(tests/\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
+        re.MULTILINE,
+    )
+ 
+    combined = stdout_content + "\n" + stderr_content
+ 
+    for match in pattern.finditer(combined):
+        name = match.group(1)
+        status_str = match.group(2)
+        if name not in seen:
+            seen.add(name)
+            results.append(TestResult(name=name, status=status_map[status_str]))
+ 
     return results
-
+ 
+### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
 def export_to_json(results: List[TestResult], output_path: Path) -> None:
     json_results = {'tests': [{'name': r.name, 'status': r.status.name} for r in results]}

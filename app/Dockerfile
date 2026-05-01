@@ -16,11 +16,13 @@ RUN apt-get update && apt-get install -y \
     python-is-python3 \
     unzip \
     && rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir \
-        pytest \
-        pandas \
-        scikit-learn
+ 
+###############################################
+# PYTHON DEPENDENCIES
+###############################################
+RUN pip3 install --no-cache-dir \
+    pandas \
+    pytest
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
