@@ -13,7 +13,6 @@ class TestResult:
     name: str
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
-### Implement the parsing logic below ###
 
 import re
  
@@ -25,8 +24,9 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
         tests/path/to/test.py::Class::test_name STATUS [ N%]
     where STATUS is PASSED, FAILED, SKIPPED, or ERROR.
  
-    Both stdout and stderr are scanned so nothing is missed regardless of
-    how the test runner routes its output.
+    The conftest.py converts setup/teardown ERRORs to FAILED in the output,
+    so fixture failures on an empty repo appear as FAILED lines here.
+    Both stdout and stderr are scanned so nothing is missed.
     """
     results = []
     seen = set()
@@ -38,6 +38,9 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
         "ERROR":   TestStatus.ERROR,
     }
  
+    # Match lines like:
+    #   tests/test_archival_system.py::TestClass::test_name PASSED [  5%]
+    # \S+ captures the full node id including any parameterisation brackets.
     pattern = re.compile(
         r"^(tests/\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
         re.MULTILINE,
@@ -54,7 +57,6 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
  
     return results
  
-### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
 def export_to_json(results: List[TestResult], output_path: Path) -> None:
     json_results = {'tests': [{'name': r.name, 'status': r.status.name} for r in results]}

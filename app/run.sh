@@ -5,23 +5,15 @@ set -e
 run_all_tests() {
     echo "Running all tests..."
     if [ -d /eval_assets/tests ]; then
-        # Validation environment: tests live in /eval_assets, codebase lives in /app.
-        # PYTHONPATH=/app lets the test suite resolve pipeline.* imports from the codebase.
-        # Tests reference bundled assets via the relative path "data/", which lives in
-        # the codebase at /app/data. Expose it inside the cwd via a symlink so the
-        # relative lookups resolve regardless of whether /app has been populated yet.
-        ln -sfn /app/data /eval_assets/data
         cd /eval_assets
         PYTHONPATH=/app:${PYTHONPATH:-} python -m pytest tests/ -v --tb=short --no-header
-    elif [ -d /app/tests ]; then
-        # Docker container with the full codebase already at /app.
-        cd /app
-        python -m pytest tests/ -v --tb=short --no-header
-    else
-        # Local development: resolve the repo root from this script's location.
+    elif [ -d "$(dirname "${BASH_SOURCE[0]}")/tests" ]; then
         SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
         cd "$SCRIPT_DIR"
-        python -m pytest tests/ -v --tb=short --no-header
+        PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}" python -m pytest tests/ -v --tb=short --no-header
+    else
+        echo "ERROR: no tests/ directory found." >&2
+        exit 1
     fi
 }
 # --- END CONFIGURATION SECTION ---

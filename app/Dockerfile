@@ -16,12 +16,11 @@ RUN apt-get update && apt-get install -y \
     python-is-python3 \
     unzip \
     && rm -rf /var/lib/apt/lists/*
- 
+
 ###############################################
 # PYTHON DEPENDENCIES
 ###############################################
-RUN pip3 install --no-cache-dir \
-    pandas \
+RUN python3 -m pip install --no-cache-dir \
     pytest
 
 ###############################################
