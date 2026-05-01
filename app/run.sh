@@ -7,6 +7,10 @@ run_all_tests() {
     if [ -d /eval_assets/tests ]; then
         # Validation environment: tests live in /eval_assets, codebase lives in /app.
         # PYTHONPATH=/app lets the test suite resolve pipeline.* imports from the codebase.
+        # Tests reference bundled assets via the relative path "data/", which lives in
+        # the codebase at /app/data. Expose it inside the cwd via a symlink so the
+        # relative lookups resolve regardless of whether /app has been populated yet.
+        ln -sfn /app/data /eval_assets/data
         cd /eval_assets
         PYTHONPATH=/app:${PYTHONPATH:-} python -m pytest tests/ -v --tb=short --no-header
     elif [ -d /app/tests ]; then
