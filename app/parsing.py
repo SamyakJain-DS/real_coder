@@ -20,12 +20,10 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
     """
     Parse pytest -v output and return one TestResult per test.
  
-    Pytest verbose output lines have the form:
-        tests/path/to/test.py::Class::test_name STATUS [ N%]
-    where STATUS is PASSED, FAILED, SKIPPED, or ERROR.
+    Pytest verbose lines look like:
+        tests/test_pipeline.py::test_name PASSED [ N%]
+        tests/test_pipeline.py::test_name FAILED [ N%]
  
-    The conftest.py converts setup/teardown ERRORs to FAILED in the output,
-    so fixture failures on an empty repo appear as FAILED lines here.
     Both stdout and stderr are scanned so nothing is missed.
     """
     results = []
@@ -39,14 +37,14 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
     }
  
     # Match lines like:
-    #   tests/test_archival_system.py::TestClass::test_name PASSED [  5%]
-    # \S+ captures the full node id including any parameterisation brackets.
+    #   tests/test_pipeline.py::test_name PASSED [  5%]
+    # The node-id may include parametrize brackets, hence \S+
     pattern = re.compile(
         r"^(tests/\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
         re.MULTILINE,
     )
  
-    combined = stdout_content + "\n" + stderr_content
+    combined = (stdout_content or "") + "\n" + (stderr_content or "")
  
     for match in pattern.finditer(combined):
         name = match.group(1)

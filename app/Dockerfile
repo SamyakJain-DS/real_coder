@@ -21,6 +21,11 @@ RUN apt-get update && apt-get install -y \
 # PYTHON DEPENDENCIES
 ###############################################
 RUN python3 -m pip install --no-cache-dir \
+    pandas \
+    numpy \
+    scikit-learn \
+    jinja2 \
+    matplotlib \
     pytest
 
 ###############################################
