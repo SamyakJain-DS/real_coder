@@ -21,4 +21,5 @@ run_all_tests() {
     fi
 }
 # --- END CONFIGURATION SECTION ---
+### COMMON EXECUTION; DO NOT MODIFY ###
 run_all_tests

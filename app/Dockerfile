@@ -8,20 +8,21 @@ ENV DEBIAN_FRONTEND=noninteractive
 ###############################################
 # SYSTEM DEPENDENCIES
 ###############################################
+
 RUN apt-get update && apt-get install -y \
     git \
-    python3.11 \
-    python3.11-venv \
+    python3 \
     python3-pip \
+    python3-setuptools \
+    python-is-python3 \
     unzip \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
 ###############################################
 # PYTHON DEPENDENCIES
 ###############################################
-RUN pip3 install --no-cache-dir \
+
+RUN pip3 install \
     pytest
 
 ###############################################
