@@ -13,48 +13,48 @@ class TestResult:
     name: str
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
-
-import re
+### Implement the parsing logic below ###
  
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
-    Parse pytest -v output and return one TestResult per test.
+    Parse pytest -v output and extract individual test results.
  
-    Pytest verbose lines look like:
-        tests/test_pipeline.py::test_name PASSED [ N%]
-        tests/test_pipeline.py::test_name FAILED [ N%]
- 
-    Both stdout and stderr are scanned so nothing is missed.
+    Pytest -v emits one line per test during execution in the form:
+        tests/path/test_file.py::test_name[params] STATUS   [ xx%]
+    where STATUS is PASSED, FAILED, ERROR, or SKIPPED.
+    The regex below captures both plain and parametrized test names.
     """
-    results = []
-    seen = set()
+    import re
  
     status_map = {
         "PASSED":  TestStatus.PASSED,
         "FAILED":  TestStatus.FAILED,
-        "SKIPPED": TestStatus.SKIPPED,
         "ERROR":   TestStatus.ERROR,
+        "SKIPPED": TestStatus.SKIPPED,
     }
  
-    # Match lines like:
-    #   tests/test_pipeline.py::test_name PASSED [  5%]
-    # The node-id may include parametrize brackets, hence \S+
+    # Match lines produced by pytest -v during test execution.
+    # Group 1: full test node id (may include [param1-param2] suffix)
+    # Group 2: status keyword
     pattern = re.compile(
-        r"^(tests/\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
+        r"^(tests/\S+::\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
         re.MULTILINE,
     )
  
-    combined = (stdout_content or "") + "\n" + (stderr_content or "")
+    results = []
+    seen = set()
  
-    for match in pattern.finditer(combined):
+    for match in pattern.finditer(stdout_content + "\n" + stderr_content):
         name = match.group(1)
         status_str = match.group(2)
-        if name not in seen:
-            seen.add(name)
-            results.append(TestResult(name=name, status=status_map[status_str]))
+        if name in seen:
+            continue
+        seen.add(name)
+        results.append(TestResult(name=name, status=status_map[status_str]))
  
     return results
  
+### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
 def export_to_json(results: List[TestResult], output_path: Path) -> None:
     json_results = {'tests': [{'name': r.name, 'status': r.status.name} for r in results]}
