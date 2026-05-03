@@ -14,46 +14,89 @@ class TestResult:
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
 ### Implement the parsing logic below ###
- 
+
+import re
+
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
-    Parse pytest -v output and extract individual test results.
- 
-    Pytest -v emits one line per test during execution in the form:
-        tests/path/test_file.py::test_name[params] STATUS   [ xx%]
-    where STATUS is PASSED, FAILED, ERROR, or SKIPPED.
-    The regex below captures both plain and parametrized test names.
+    Parse the test output content and extract test results.
     """
-    import re
- 
-    status_map = {
-        "PASSED":  TestStatus.PASSED,
-        "FAILED":  TestStatus.FAILED,
-        "ERROR":   TestStatus.ERROR,
-        "SKIPPED": TestStatus.SKIPPED,
-    }
- 
-    # Match lines produced by pytest -v during test execution.
-    # Group 1: full test node id (may include [param1-param2] suffix)
-    # Group 2: status keyword
-    pattern = re.compile(
-        r"^(tests/\S+::\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
-        re.MULTILINE,
+    ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+
+    pytest_inline_pattern = re.compile(
+        r'^(?P<name>.+::.+?)\s+(?P<status>PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)\s*(?:\[[^\]]+\])?$',
+        re.IGNORECASE,
     )
- 
-    results = []
-    seen = set()
- 
-    for match in pattern.finditer(stdout_content + "\n" + stderr_content):
-        name = match.group(1)
-        status_str = match.group(2)
-        if name in seen:
+    pytest_summary_pattern = re.compile(
+        r'^(?P<status>PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)\s+(?P<name>.+::.+)$',
+        re.IGNORECASE,
+    )
+    unittest_pattern = re.compile(
+        r'^(?P<name>test[^\s]*\s+\([^)]+\))\s+\.\.\.\s+(?P<status>ok|FAIL|ERROR|skipped)\b',
+        re.IGNORECASE,
+    )
+
+    status_map = {
+        'PASSED': TestStatus.PASSED,
+        'XPASS': TestStatus.PASSED,
+        'FAILED': TestStatus.FAILED,
+        'FAIL': TestStatus.FAILED,
+        'SKIPPED': TestStatus.SKIPPED,
+        'XFAIL': TestStatus.SKIPPED,
+        'ERROR': TestStatus.ERROR,
+        'OK': TestStatus.PASSED,
+    }
+    precedence = {
+        TestStatus.PASSED: 0,
+        TestStatus.SKIPPED: 1,
+        TestStatus.FAILED: 2,
+        TestStatus.ERROR: 3,
+    }
+
+    ordered_names: List[str] = []
+    results_by_name: dict[str, TestStatus] = {}
+
+    def record(name: str, status_text: str) -> None:
+        cleaned_name = name.strip()
+        normalized_status_text = status_text.strip().upper()
+        if not cleaned_name or normalized_status_text not in status_map:
+            return
+
+        status = status_map[normalized_status_text]
+        if cleaned_name not in results_by_name:
+            ordered_names.append(cleaned_name)
+            results_by_name[cleaned_name] = status
+            return
+
+        existing = results_by_name[cleaned_name]
+        if precedence[status] > precedence[existing]:
+            results_by_name[cleaned_name] = status
+
+    combined_output = f'{stdout_content}\n{stderr_content}'
+    for raw_line in combined_output.splitlines():
+        line = ansi_escape.sub('', raw_line).strip()
+        if not line:
             continue
-        seen.add(name)
-        results.append(TestResult(name=name, status=status_map[status_str]))
- 
-    return results
- 
+
+        match = pytest_inline_pattern.match(line)
+        if match:
+            record(match.group('name'), match.group('status'))
+            continue
+
+        match = pytest_summary_pattern.match(line)
+        if match:
+            summary_name = match.group('name').strip()
+            # Skip verbose summary lines with failure messages appended after " - ".
+            if ' - ' not in summary_name:
+                record(summary_name, match.group('status'))
+            continue
+
+        match = unittest_pattern.match(line)
+        if match:
+            record(match.group('name'), match.group('status'))
+
+    return [TestResult(name=name, status=results_by_name[name]) for name in ordered_names]
+
 ### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
 def export_to_json(results: List[TestResult], output_path: Path) -> None:
