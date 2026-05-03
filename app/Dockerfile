@@ -8,7 +8,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 ###############################################
 # SYSTEM DEPENDENCIES
 ###############################################
-
 RUN apt-get update && apt-get install -y \
     git \
     python3 \
@@ -18,12 +17,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-###############################################
-# PYTHON DEPENDENCIES
-###############################################
-
-RUN pip3 install \
-    pytest
+RUN pip3 install --no-cache-dir pytest
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
