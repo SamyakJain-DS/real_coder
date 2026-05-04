@@ -14,89 +14,126 @@ class TestResult:
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
 ### Implement the parsing logic below ###
-
-import re
-
+ 
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
-    Parse the test output content and extract test results.
+    Parse Vitest --reporter=verbose output and extract individual test results.
     """
+    import re
+ 
+    # Strip ANSI colour codes that Vitest emits in verbose mode.
     ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
-
-    pytest_inline_pattern = re.compile(
-        r'^(?P<name>.+::.+?)\s+(?P<status>PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)\s*(?:\[[^\]]+\])?$',
-        re.IGNORECASE,
+ 
+    # Match lines that begin with a Vitest status symbol followed by a name.
+    # Note: Vitest uses both '>' (U+003E) and '›' (U+203A, single right-pointing
+    # angle quotation mark) as the suite-separator character depending on
+    # version. Both are handled in is_individual_test() below.
+    symbol_pattern = re.compile(r'^\s*([✓×✗↓])\s+(.+?)\s*$', re.MULTILINE)
+ 
+    # Match lines that begin with a WORD status (PASS/FAIL/…).
+    word_pattern = re.compile(r'^\s*(PASS|FAIL|FAILED|ERROR|SKIP|SKIPPED)\s+(.+?)\s*$', re.MULTILINE)
+ 
+    # Fallback: match suite-level FAIL lines when no individual tests parsed.
+    suite_fail_pattern = re.compile(
+        r'^\s*FAIL\s+(.+?\.(?:test|spec)\.[cm]?[jt]sx?)\s+\[\s*(.+?)\s*\]\s*$',
+        re.MULTILINE,
     )
-    pytest_summary_pattern = re.compile(
-        r'^(?P<status>PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)\s+(?P<name>.+::.+)$',
-        re.IGNORECASE,
-    )
-    unittest_pattern = re.compile(
-        r'^(?P<name>test[^\s]*\s+\([^)]+\))\s+\.\.\.\s+(?P<status>ok|FAIL|ERROR|skipped)\b',
-        re.IGNORECASE,
-    )
-
+ 
+    # Strip trailing duration stamps ("4ms", "1.2s") and summary suffixes.
+    duration_pattern = re.compile(r'\s+\d+(?:\.\d+)?\s*(?:ms|s)$')
+    file_summary_pattern = re.compile(r'\(\s*\d+\s+(?:tests?|skipped|failed|passed)\s*\)')
+ 
     status_map = {
-        'PASSED': TestStatus.PASSED,
-        'XPASS': TestStatus.PASSED,
-        'FAILED': TestStatus.FAILED,
-        'FAIL': TestStatus.FAILED,
+        '✓': TestStatus.PASSED,
+        '×': TestStatus.FAILED,
+        '✗': TestStatus.FAILED,
+        '↓': TestStatus.SKIPPED,
+        'PASS':    TestStatus.PASSED,
+        'FAIL':    TestStatus.FAILED,
+        'PASSED':  TestStatus.PASSED,
+        'FAILED':  TestStatus.FAILED,
+        'ERROR':   TestStatus.ERROR,
+        'SKIP':    TestStatus.SKIPPED,
         'SKIPPED': TestStatus.SKIPPED,
-        'XFAIL': TestStatus.SKIPPED,
-        'ERROR': TestStatus.ERROR,
-        'OK': TestStatus.PASSED,
     }
+ 
+    # Precedence for deduplication: higher wins when the same test appears
+    # multiple times (e.g., retried or restated in summary).
     precedence = {
-        TestStatus.PASSED: 0,
+        TestStatus.PASSED:  0,
         TestStatus.SKIPPED: 1,
-        TestStatus.FAILED: 2,
-        TestStatus.ERROR: 3,
+        TestStatus.FAILED:  2,
+        TestStatus.ERROR:   3,
     }
-
+ 
     ordered_names: List[str] = []
-    results_by_name: dict[str, TestStatus] = {}
-
-    def record(name: str, status_text: str) -> None:
-        cleaned_name = name.strip()
-        normalized_status_text = status_text.strip().upper()
-        if not cleaned_name or normalized_status_text not in status_map:
+    results_by_name: dict = {}
+ 
+    def record(name: str, status: TestStatus) -> None:
+        if name not in results_by_name:
+            ordered_names.append(name)
+            results_by_name[name] = status
             return
-
-        status = status_map[normalized_status_text]
-        if cleaned_name not in results_by_name:
-            ordered_names.append(cleaned_name)
-            results_by_name[cleaned_name] = status
-            return
-
-        existing = results_by_name[cleaned_name]
-        if precedence[status] > precedence[existing]:
-            results_by_name[cleaned_name] = status
-
-    combined_output = f'{stdout_content}\n{stderr_content}'
-    for raw_line in combined_output.splitlines():
+        if precedence[status] > precedence[results_by_name[name]]:
+            results_by_name[name] = status
+ 
+    def clean_test_name(name: str) -> str:
+        name = duration_pattern.sub('', name).strip()
+        name = re.sub(r'\s+\(.+?\)$', '', name).strip()
+        return name
+ 
+    def is_individual_test(name: str) -> bool:
+        """
+        Return True only for individual test lines, not for file/suite summaries.
+ 
+        Vitest verbose output uses ' > ' (ASCII >) as the suite separator on
+        most versions and ' › ' (U+203A) on some older/variant builds. Both
+        are checked so the parser is robust across Vitest releases. The '::'
+        separator is included for compatibility with other test frameworks.
+        """
+        if file_summary_pattern.search(name):
+            return False
+        return ' > ' in name or ' \u203a ' in name or '::' in name
+ 
+    combined = f'{stdout_content}\n{stderr_content}'
+ 
+    for raw_line in combined.splitlines():
         line = ansi_escape.sub('', raw_line).strip()
         if not line:
             continue
-
-        match = pytest_inline_pattern.match(line)
-        if match:
-            record(match.group('name'), match.group('status'))
+ 
+        # Symbol-prefixed individual test lines (primary path for Vitest verbose).
+        m = symbol_pattern.match(line)
+        if m:
+            symbol = m.group(1)
+            test_name = clean_test_name(m.group(2).strip())
+            if is_individual_test(test_name) and symbol in status_map:
+                record(test_name, status_map[symbol])
             continue
-
-        match = pytest_summary_pattern.match(line)
-        if match:
-            summary_name = match.group('name').strip()
-            # Skip verbose summary lines with failure messages appended after " - ".
-            if ' - ' not in summary_name:
-                record(summary_name, match.group('status'))
+ 
+        # Word-prefixed lines (PASS/FAIL/… — secondary path).
+        m = word_pattern.match(line)
+        if m:
+            status_word = m.group(1)
+            test_name = clean_test_name(m.group(2).strip())
+            if is_individual_test(test_name):
+                record(test_name, status_map[status_word])
             continue
-
-        match = unittest_pattern.match(line)
-        if match:
-            record(match.group('name'), match.group('status'))
-
-    return [TestResult(name=name, status=results_by_name[name]) for name in ordered_names]
-
+ 
+    # Fallback: if nothing was parsed, try to surface suite-level failures.
+    if not ordered_names:
+        for m in suite_fail_pattern.finditer(ansi_escape.sub('', combined)):
+            file_name = m.group(1).strip()
+            suite_name = m.group(2).strip()
+            record(f'{file_name} > {suite_name}', TestStatus.FAILED)
+ 
+    # Last-resort fallback: record a single ERROR entry so before.json /
+    # after.json are never silently empty when the test run crashes entirely.
+    if not ordered_names and ('ERROR:' in combined or 'Error:' in combined):
+        record('Test run', TestStatus.ERROR)
+ 
+    return [TestResult(name=n, status=results_by_name[n]) for n in ordered_names]
+ 
 ### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
 def export_to_json(results: List[TestResult], output_path: Path) -> None:
