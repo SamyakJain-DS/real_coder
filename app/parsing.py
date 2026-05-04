@@ -17,85 +17,108 @@ class TestResult:
 
 import re
 
-def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
+_RESULT_PATTERN = re.compile(r"^(PASSED|FAILED|SKIPPED|ERROR)\s+(.+)$")
+
+# Pytest's verbose reporter prints one line per test of the form
+#   <nodeid> <STATUS> [ pct%]
+# where <nodeid> is e.g. "tests/test_embeddable_webdav.py::test_t001_xyz".
+# The trailing "[ pct%]" suffix is optional (e.g. when only one test
+# is collected the percentage column is sometimes omitted on resumed
+# runs). We accept it either way so the parser remains tolerant of
+# slight formatting variations between pytest versions.
+_PYTEST_PATTERN = re.compile(
+    r"^(?P<name>\S.*?)\s+(?P<status>PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)"
+    r"(?:\s+\[\s*\d+%\s*\])?\s*$"
+)
+
+_PYTEST_STATUS_MAP = {
+    "PASSED": TestStatus.PASSED,
+    "XPASS": TestStatus.PASSED,
+    "FAILED": TestStatus.FAILED,
+    "ERROR": TestStatus.ERROR,
+    "SKIPPED": TestStatus.SKIPPED,
+    "XFAIL": TestStatus.SKIPPED,
+}
+
+
+def _parse_pytest_verbose(stdout_content: str) -> List[TestResult]:
+    """Parse pytest's `--reporter=verbose` output (one status per test).
+
+    Each per-test line looks like::
+
+        tests/test_embeddable_webdav.py::test_t001_xyz PASSED [  1%]
+
+    Section banners and traceback text are filtered out by requiring the
+    line to contain a recognised status token in the expected position.
+    Returns an empty list when no per-test lines were found so the caller
+    can fall back to a different parser.
     """
-    Parse the test output content and extract test results.
+    results: List[TestResult] = []
+    for line in stdout_content.splitlines():
+        stripped = line.rstrip()
+        if not stripped:
+            continue
+        match = _PYTEST_PATTERN.match(stripped)
+        if not match:
+            continue
+        name = match.group("name").strip()
+        # Reject banner-style "STATUS message" lines and pytest's summary
+        # blocks (e.g. "FAILED tests/test_x.py::test_y - AssertionError"),
+        # neither of which represents a per-test status row.
+        if not name or name.startswith(("=", "-", "_")):
+            continue
+        if "::" not in name:
+            continue
+        status = _PYTEST_STATUS_MAP.get(match.group("status"), TestStatus.FAILED)
+        results.append(TestResult(name=name, status=status))
+    return results
+
+
+def _parse_status_lines(stdout_content: str) -> List[TestResult]:
+    """Parse '<STATUS> <name>' lines (legacy pytest-style verbose output)."""
+    results: List[TestResult] = []
+    for line in stdout_content.splitlines():
+        match = _RESULT_PATTERN.match(line)
+        if match:
+            status_str, name = match.groups()
+            status = (
+                TestStatus.PASSED
+                if status_str == "PASSED"
+                else TestStatus.FAILED
+            )
+            results.append(TestResult(name=name.strip(), status=status))
+    return results
+
+
+def parse_test_output(
+    stdout_content: str, stderr_content: str
+) -> List[TestResult]:
+    """Parse captured pytest stdout into a list of TestResult.
+
+    Two input formats are supported:
+
+      1. Pytest's verbose reporter ('<nodeid> <STATUS> [pct%]'). This is
+         what the project's run.sh emits today.
+      2. '<STATUS> <name>' lines, retained for backwards compatibility
+         with prior run.sh variants that post-processed pytest output.
+
+    The verbose-reporter parser runs first; if zero per-test rows match,
+    the line-based parser runs as a fallback.
     """
-    ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+    # Tolerate an optional UTF-8 BOM at the start of the captured stdout.
+    # On Linux (the production runtime) Python's default encoding is UTF-8
+    # and the BOM decodes as a single '\ufeff' character. On Windows the
+    # default encoding is cp1252 and the same three BOM bytes (ef bb bf)
+    # decode as the mojibake sequence 'ï»¿'. Strip either form.
+    if stdout_content.startswith("\ufeff"):
+        stdout_content = stdout_content[1:]
+    elif stdout_content.startswith("\u00ef\u00bb\u00bf"):
+        stdout_content = stdout_content[3:]
+    results = _parse_pytest_verbose(stdout_content)
+    if results:
+        return results
+    return _parse_status_lines(stdout_content)
 
-    pytest_inline_pattern = re.compile(
-        r'^(?P<name>.+::.+?)\s+(?P<status>PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)\s*(?:\[[^\]]+\])?$',
-        re.IGNORECASE,
-    )
-    pytest_summary_pattern = re.compile(
-        r'^(?P<status>PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)\s+(?P<name>.+::.+)$',
-        re.IGNORECASE,
-    )
-    unittest_pattern = re.compile(
-        r'^(?P<name>test[^\s]*\s+\([^)]+\))\s+\.\.\.\s+(?P<status>ok|FAIL|ERROR|skipped)\b',
-        re.IGNORECASE,
-    )
-
-    status_map = {
-        'PASSED': TestStatus.PASSED,
-        'XPASS': TestStatus.PASSED,
-        'FAILED': TestStatus.FAILED,
-        'FAIL': TestStatus.FAILED,
-        'SKIPPED': TestStatus.SKIPPED,
-        'XFAIL': TestStatus.SKIPPED,
-        'ERROR': TestStatus.ERROR,
-        'OK': TestStatus.PASSED,
-    }
-    precedence = {
-        TestStatus.PASSED: 0,
-        TestStatus.SKIPPED: 1,
-        TestStatus.FAILED: 2,
-        TestStatus.ERROR: 3,
-    }
-
-    ordered_names: List[str] = []
-    results_by_name: dict[str, TestStatus] = {}
-
-    def record(name: str, status_text: str) -> None:
-        cleaned_name = name.strip()
-        normalized_status_text = status_text.strip().upper()
-        if not cleaned_name or normalized_status_text not in status_map:
-            return
-
-        status = status_map[normalized_status_text]
-        if cleaned_name not in results_by_name:
-            ordered_names.append(cleaned_name)
-            results_by_name[cleaned_name] = status
-            return
-
-        existing = results_by_name[cleaned_name]
-        if precedence[status] > precedence[existing]:
-            results_by_name[cleaned_name] = status
-
-    combined_output = f'{stdout_content}\n{stderr_content}'
-    for raw_line in combined_output.splitlines():
-        line = ansi_escape.sub('', raw_line).strip()
-        if not line:
-            continue
-
-        match = pytest_inline_pattern.match(line)
-        if match:
-            record(match.group('name'), match.group('status'))
-            continue
-
-        match = pytest_summary_pattern.match(line)
-        if match:
-            summary_name = match.group('name').strip()
-            # Skip verbose summary lines with failure messages appended after " - ".
-            if ' - ' not in summary_name:
-                record(summary_name, match.group('status'))
-            continue
-
-        match = unittest_pattern.match(line)
-        if match:
-            record(match.group('name'), match.group('status'))
-
-    return [TestResult(name=name, status=results_by_name[name]) for name in ordered_names]
 
 ### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
