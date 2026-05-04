@@ -10,16 +10,15 @@ ENV DEBIAN_FRONTEND=noninteractive
 ###############################################
 RUN apt-get update && apt-get install -y \
     git \
-    python3.11 \
-    python3.11-venv \
+    python3 \
     python3-pip \
+    python3-setuptools \
+    python-is-python3 \
     unzip \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python3.11 -m pip install --no-cache-dir \
-        pytest==8.3.3
+RUN pip3 install --no-cache-dir pytest \
+    pandas
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
