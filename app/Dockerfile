@@ -17,7 +17,8 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir pytest
+RUN pip3 install --no-cache-dir pytest \
+    flask
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
