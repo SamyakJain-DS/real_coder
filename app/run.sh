@@ -3,21 +3,15 @@
 set -e
 # --- CONFIGURE THIS SECTION ---
 run_all_tests() {
-    echo "Running all tests..."
-    if [ -d /eval_assets/tests ]; then
-        cd /eval_assets
-        PYTHONPATH=/app:"${PYTHONPATH:-}" python -m pytest tests/ -v --tb=short --no-header -W ignore 2>&1
-    elif [ -d /app/tests ]; then
-        # Local Docker: codebase (including tests) mounted at /app.
-        cd /app
-        python -m pytest tests/ -v --tb=short --no-header -W ignore 2>&1
-    else
-        # Fallback: run from the directory containing this script.
-        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        cd "$SCRIPT_DIR"
-        PYTHON=$(command -v python 2>/dev/null || command -v python3)
-        $PYTHON -m pytest tests/ -v --tb=short --no-header -W ignore 2>&1
-    fi
+  echo "Running all tests..."
+
+  if [ -d /eval_assets/tests ]; then
+    cd /eval_assets
+    PYTHONPATH=/app:/eval_assets:${PYTHONPATH:-} python3 -m pytest tests/ -v --tb=short --no-header 2>&1
+  else
+    cd /app
+    PYTHONPATH=/app:${PYTHONPATH:-} python3 -m pytest tests/ -v --tb=short --no-header 2>&1
+  fi
 }
 # --- END CONFIGURATION SECTION ---
 ### COMMON EXECUTION; DO NOT MODIFY ###

@@ -15,11 +15,9 @@ RUN apt-get update && apt-get install -y \
     python3-setuptools \
     python-is-python3 \
     unzip \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN pip3 install \
-    click==8.1.7 \
-    pytest==8.1.1
+    build-essential \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip3 install --no-cache-dir PyYAML pytest
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
