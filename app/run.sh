@@ -4,7 +4,7 @@ set -e
 # --- CONFIGURE THIS SECTION ---
 run_all_tests() {
     echo "Running all tests..."
- 
+
     # ---- Locate the C# project directory --------------------------------
     # Check /app first (validation environment), then cwd (local environment).
     PROJECT_DIR="/app"
@@ -17,15 +17,18 @@ run_all_tests() {
             fi
         fi
     done
- 
+
     # ---- Start the ASP.NET Core server in the background ----------------
+    # dotnet run triggers restore internally; since packages are pre-warmed
+    # in /root/.nuget/packages during the image build, restore reads from
+    # the local cache and requires no network access.
     ASPNETCORE_URLS="http://localhost:5000" dotnet run --project "$PROJECT_DIR" \
         >/dev/null 2>&1 &
     SERVER_PID=$!
- 
-    # ---- Wait up to 30 s for the server to accept connections -----------
+
+    # ---- Wait up to 120 s for the server to accept connections -----------
     echo "Waiting for server..."
-    for i in $(seq 1 15); do
+    for i in $(seq 1 120); do
         if python3 -c \
             "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/inventory', timeout=1)" \
             2>/dev/null; then
@@ -34,7 +37,7 @@ run_all_tests() {
         fi
         sleep 1
     done
- 
+
     # ---- Run the test suite ---------------------------------------------
     if [ -d /eval_assets/tests ]; then
         cd /eval_assets
@@ -48,7 +51,7 @@ run_all_tests() {
         PYTHON=$(command -v python 2>/dev/null || command -v python3)
         $PYTHON -m pytest tests/ -v --tb=short --no-header --color=no 2>&1
     fi
- 
+
     # ---- Shut down the server -------------------------------------------
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
