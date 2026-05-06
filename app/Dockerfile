@@ -15,9 +15,23 @@ RUN apt-get update && apt-get install -y \
     python3-setuptools \
     python-is-python3 \
     unzip \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip3 install --no-cache-dir PyYAML pytest
+    && rm -rf /var/lib/apt/lists/*
+ 
+###############################################
+# .NET 8 SDK
+###############################################
+RUN apt-get update && apt-get install -y wget ca-certificates && \
+    wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb \
+         -O /tmp/packages-microsoft-prod.deb && \
+    dpkg -i /tmp/packages-microsoft-prod.deb && \
+    rm /tmp/packages-microsoft-prod.deb && \
+    apt-get update && apt-get install -y dotnet-sdk-8.0 && \
+    rm -rf /var/lib/apt/lists/*
+ 
+###############################################
+# PYTHON TEST DEPENDENCIES
+###############################################
+RUN pip3 install --no-cache-dir pytest requests
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP

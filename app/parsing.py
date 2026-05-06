@@ -16,29 +16,49 @@ class TestResult:
 ### Implement the parsing logic below ###
 
 import re
-
+ 
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
-    """Parse pytest verbose output into individual test results."""
-    results: List[TestResult] = []
-    combined = stdout_content + "\n" + stderr_content
-    pattern = re.compile(
-        r"^([\w/\\.-]+\.py::[\w\[\].-]+)\s+(PASSED|FAILED|SKIPPED|ERROR)",
-        re.MULTILINE,
-    )
+    """
+    Parse pytest -v output and return one TestResult per test.
+ 
+    Pytest -v produces lines of the form:
+        tests/test_api.py::ClassName::test_name PASSED    [ 12%]
+        tests/test_api.py::ClassName::test_name FAILED    [ 14%]
+ 
+    The status word is always separated from the test identifier by
+    whitespace and may be followed by an optional progress marker.
+    """
+    # Strip ANSI escape codes so colour output does not confuse the regex.
+    ansi_escape = re.compile(r"\x1b\[[0-9;]*[mK]")
+    combined = ansi_escape.sub("", stdout_content + "\n" + stderr_content)
+ 
     status_map = {
         "PASSED": TestStatus.PASSED,
         "FAILED": TestStatus.FAILED,
-        "SKIPPED": TestStatus.SKIPPED,
         "ERROR": TestStatus.ERROR,
+        "SKIPPED": TestStatus.SKIPPED,
     }
+ 
+    # Match lines like:
+    #   tests/test_api.py::TestClass::test_name PASSED   [ 12%]
+    pattern = re.compile(
+        r"^(tests/\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
+        re.MULTILINE,
+    )
+ 
+    results: List[TestResult] = []
+    seen: set = set()
+ 
     for match in pattern.finditer(combined):
-        results.append(TestResult(
-            name=match.group(1),
-            status=status_map[match.group(2)],
-        ))
+        name = match.group(1)
+        status_str = match.group(2)
+        if name not in seen:
+            seen.add(name)
+            results.append(TestResult(name=name, status=status_map[status_str]))
+ 
     return results
-
-
+ 
+ 
 ### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
 def export_to_json(results: List[TestResult], output_path: Path) -> None:
