@@ -14,47 +14,39 @@ class TestResult:
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
 ### Implement the parsing logic below ###
-
+ 
 import re
  
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
-    Parse pytest -v output and return one TestResult per test.
- 
-    Pytest -v produces lines of the form:
-        tests/test_api.py::ClassName::test_name PASSED    [ 12%]
-        tests/test_api.py::ClassName::test_name FAILED    [ 14%]
- 
-    The status word is always separated from the test identifier by
-    whitespace and may be followed by an optional progress marker.
+    Parse pytest verbose output and extract test results.
+    Handles both relative paths (tests/...) and absolute paths (/eval_assets/tests/...).
     """
-    # Strip ANSI escape codes so colour output does not confuse the regex.
-    ansi_escape = re.compile(r"\x1b\[[0-9;]*[mK]")
-    combined = ansi_escape.sub("", stdout_content + "\n" + stderr_content)
+    results = []
+    seen = set()
+    combined = stdout_content + "\n" + stderr_content
+ 
+    pattern = re.compile(
+        r"^(\S*test_\S+\.py::\S+)\s+(PASSED|FAILED|SKIPPED|ERROR)\b",
+        re.MULTILINE,
+    )
  
     status_map = {
         "PASSED": TestStatus.PASSED,
         "FAILED": TestStatus.FAILED,
-        "ERROR": TestStatus.ERROR,
         "SKIPPED": TestStatus.SKIPPED,
+        "ERROR": TestStatus.ERROR,
     }
  
-    # Match lines like:
-    #   tests/test_api.py::TestClass::test_name PASSED   [ 12%]
-    pattern = re.compile(
-        r"^(tests/\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
-        re.MULTILINE,
-    )
- 
-    results: List[TestResult] = []
-    seen: set = set()
- 
     for match in pattern.finditer(combined):
-        name = match.group(1)
+        test_name = match.group(1)
         status_str = match.group(2)
-        if name not in seen:
-            seen.add(name)
-            results.append(TestResult(name=name, status=status_map[status_str]))
+        if test_name not in seen:
+            seen.add(test_name)
+            results.append(TestResult(
+                name=test_name,
+                status=status_map[status_str],
+            ))
  
     return results
  

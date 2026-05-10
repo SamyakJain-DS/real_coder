@@ -16,8 +16,16 @@ RUN apt-get update && apt-get install -y \
     python-is-python3 \
     unzip \
     && rm -rf /var/lib/apt/lists/*
-
-RUN pip3 install --no-cache-dir "fastapi[standard]" "pydantic>=2.0,<3.0" pytest
+ 
+###############################################
+# PYTHON DEPENDENCIES
+###############################################
+RUN pip install --no-cache-dir \
+    fastapi \
+    sqlalchemy \
+    uvicorn \
+    httpx \
+    pytest
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
