@@ -14,43 +14,33 @@ class TestResult:
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
 ### Implement the parsing logic below ###
- 
+
 import re
- 
+
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
-    """
-    Parse pytest verbose output and extract test results.
-    Handles both relative paths (tests/...) and absolute paths (/eval_assets/tests/...).
-    """
+    """Parse verbose pytest output into individual test results."""
     results = []
-    seen = set()
     combined = stdout_content + "\n" + stderr_content
- 
-    pattern = re.compile(
-        r"^(\S*test_\S+\.py::\S+)\s+(PASSED|FAILED|SKIPPED|ERROR)\b",
-        re.MULTILINE,
-    )
- 
     status_map = {
         "PASSED": TestStatus.PASSED,
         "FAILED": TestStatus.FAILED,
         "SKIPPED": TestStatus.SKIPPED,
         "ERROR": TestStatus.ERROR,
     }
- 
-    for match in pattern.finditer(combined):
-        test_name = match.group(1)
-        status_str = match.group(2)
-        if test_name not in seen:
-            seen.add(test_name)
-            results.append(TestResult(
-                name=test_name,
-                status=status_map[status_str],
-            ))
- 
+
+    for raw_line in combined.splitlines():
+        line = raw_line.strip()
+        match = re.match(r"^((?:tests/|/app/tests/|\S+::).+?)\s+(PASSED|FAILED|SKIPPED|ERROR)\b", line)
+        if not match:
+            continue
+
+        test_name = match.group(1).strip()
+        status = status_map[match.group(2)]
+        results.append(TestResult(name=test_name, status=status))
+
     return results
- 
- 
+
+
 ### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
 def export_to_json(results: List[TestResult], output_path: Path) -> None:
