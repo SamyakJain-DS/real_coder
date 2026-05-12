@@ -28,7 +28,6 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
  
     We parse both stdout and stderr to be robust against output routing differences.
     """
-    import re
  
     status_map = {
         "PASSED":  TestStatus.PASSED,
