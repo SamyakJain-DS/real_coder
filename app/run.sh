@@ -6,10 +6,8 @@ set -e
 run_all_tests() {
     echo "Running all tests..."
     if [ -d /eval_assets/tests ]; then
-        # Running inside the validation container: tests live in /eval_assets/tests/
-        # and the codebase (pipeline.py) lives in /app/
-        cd /eval_assets
-        PYTHONPATH=/app:${PYTHONPATH:-} python -m pytest tests/ -v --tb=short --no-header
+        cd /app
+        PYTHONPATH=/app:${PYTHONPATH:-} python -m pytest /eval_assets/tests/ -v --tb=short --no-header
     elif [ -d /app/tests ]; then
         # Running locally inside a Docker container with tests in /app/tests/
         cd /app
