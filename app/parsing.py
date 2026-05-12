@@ -13,35 +13,48 @@ class TestResult:
     name: str
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
-### Implement the parsing logic below ###
-
+ 
 import re
 
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
-    """Parse verbose pytest output into individual test results."""
-    results = []
-    combined = stdout_content + "\n" + stderr_content
+    """
+    Parse pytest -v output and extract test results.
+ 
+    Pytest verbose output lines have the form:
+        tests/test_foo.py::ClassName::test_method[param] PASSED [ 42%]
+        tests/test_foo.py::ClassName::test_method        FAILED [  5%]
+        tests/test_foo.py::ClassName::test_method        ERROR  [ 10%]
+        tests/test_foo.py::ClassName::test_method        SKIPPED [50%]
+ 
+    We parse both stdout and stderr to be robust against output routing differences.
+    """
+    import re
+ 
     status_map = {
-        "PASSED": TestStatus.PASSED,
-        "FAILED": TestStatus.FAILED,
+        "PASSED":  TestStatus.PASSED,
+        "FAILED":  TestStatus.FAILED,
+        "ERROR":   TestStatus.ERROR,
         "SKIPPED": TestStatus.SKIPPED,
-        "ERROR": TestStatus.ERROR,
     }
-
-    for raw_line in combined.splitlines():
-        line = raw_line.strip()
-        match = re.match(r"^((?:tests/|/app/tests/|\S+::).+?)\s+(PASSED|FAILED|SKIPPED|ERROR)\b", line)
-        if not match:
-            continue
-
-        test_name = match.group(1).strip()
-        status = status_map[match.group(2)]
-        results.append(TestResult(name=test_name, status=status))
-
+ 
+    pattern = re.compile(
+        r"^(\S+::\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
+        re.MULTILINE,
+    )
+ 
+    results: List[TestResult] = []
+    seen: set = set()
+ 
+    for content in (stdout_content, stderr_content):
+        for match in pattern.finditer(content):
+            name = match.group(1)
+            status_str = match.group(2)
+            if name not in seen:
+                seen.add(name)
+                results.append(TestResult(name=name, status=status_map[status_str]))
+ 
     return results
-
-
-### Implement the parsing logic above ###
+ 
 ### DO NOT MODIFY THE CODE BELOW ###
 def export_to_json(results: List[TestResult], output_path: Path) -> None:
     json_results = {'tests': [{'name': r.name, 'status': r.status.name} for r in results]}

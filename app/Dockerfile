@@ -10,15 +10,19 @@ ENV DEBIAN_FRONTEND=noninteractive
 ###############################################
 RUN apt-get update && apt-get install -y \
     git \
-    openjdk-17-jdk \
-    maven \
     python3 \
     python3-pip \
     python3-setuptools \
     python-is-python3 \
     unzip \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip3 install --no-cache-dir pytest
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir \
+    pandas \
+    numpy \
+    scikit-learn \
+    jinja2 \
+    pytest
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP
