@@ -15,14 +15,26 @@ RUN apt-get update && apt-get install -y \
     python3-setuptools \
     python-is-python3 \
     unzip \
-    openjdk-17-jdk \
-    maven \
     && rm -rf /var/lib/apt/lists/*
-
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-ENV PATH="${JAVA_HOME}/bin:${PATH}"
-
-RUN pip3 install --no-cache-dir pytest
+ 
+# curl and wget are needed by run.sh (health-check) and the .NET SDK install
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    apt-transport-https \
+    && rm -rf /var/lib/apt/lists/*
+ 
+# Install .NET 8 SDK from the official Microsoft apt feed
+RUN wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb \
+        -O /tmp/packages-microsoft-prod.deb \
+    && dpkg -i /tmp/packages-microsoft-prod.deb \
+    && rm /tmp/packages-microsoft-prod.deb \
+    && apt-get update \
+    && apt-get install -y dotnet-sdk-8.0 \
+    && rm -rf /var/lib/apt/lists/*
+ 
+# Install Python packages required by the integration test suite
+RUN pip install pytest requests
 
 ###############################################
 # WORKING DIRECTORY + GIT SETUP

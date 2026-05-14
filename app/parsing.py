@@ -14,43 +14,63 @@ class TestResult:
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
  
-import re
-
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
-    """
-    Parse pytest -v output and extract test results.
- 
-    Pytest verbose output lines have the form:
-        tests/test_foo.py::ClassName::test_method[param] PASSED [ 42%]
-        tests/test_foo.py::ClassName::test_method        FAILED [  5%]
-        tests/test_foo.py::ClassName::test_method        ERROR  [ 10%]
-        tests/test_foo.py::ClassName::test_method        SKIPPED [50%]
- 
-    We parse both stdout and stderr to be robust against output routing differences.
-    """
+    import re
  
     status_map = {
-        "PASSED":  TestStatus.PASSED,
-        "FAILED":  TestStatus.FAILED,
-        "ERROR":   TestStatus.ERROR,
-        "SKIPPED": TestStatus.SKIPPED,
+        'PASSED':  TestStatus.PASSED,
+        'FAILED':  TestStatus.FAILED,
+        'ERROR':   TestStatus.ERROR,
+        'SKIPPED': TestStatus.SKIPPED,
     }
  
-    pattern = re.compile(
-        r"^(\S+::\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
-        re.MULTILINE,
-    )
+    results   = []
+    seen      = set()
+    pending   = None          # node-id of the test whose status we are waiting for
  
-    results: List[TestResult] = []
-    seen: set = set()
+    for line in stdout_content.splitlines():
+        # -- Does this line begin with a pytest node-id? ------------------
+        id_match = re.match(r'^(\S+::\S+)', line)
+        if id_match:
+            candidate = id_match.group(1)
+            # Check whether the status word is already on this line
+            status_inline = re.search(r'\s+(PASSED|FAILED|ERROR|SKIPPED)\b', line)
+            if status_inline:
+                if candidate not in seen:
+                    results.append(TestResult(
+                        name=candidate,
+                        status=status_map[status_inline.group(1)],
+                    ))
+                    seen.add(candidate)
+                pending = None
+            else:
+                # Status will appear on a later line (server log interleaved)
+                pending = candidate
+            continue
  
-    for content in (stdout_content, stderr_content):
-        for match in pattern.finditer(content):
-            name = match.group(1)
-            status_str = match.group(2)
-            if name not in seen:
-                seen.add(name)
-                results.append(TestResult(name=name, status=status_map[status_str]))
+        # -- We are waiting for the status of 'pending' -------------------
+        if pending is not None:
+            # A bare status word at the start of a line belongs to 'pending'
+            status_match = re.match(r'^(PASSED|FAILED|ERROR|SKIPPED)\b', line)
+            if status_match:
+                if pending not in seen:
+                    results.append(TestResult(
+                        name=pending,
+                        status=status_map[status_match.group(1)],
+                    ))
+                    seen.add(pending)
+                pending = None
+            # Section separators or short-summary lines signal we missed the status
+            elif re.match(r'^[_=]{3,}', line) or \
+                 re.match(r'^(?:PASSED|FAILED|ERROR|SKIPPED)\s+\S+::', line):
+                pending = None
+ 
+    # -- Fallback: short test summary "FAILED path::class::test - reason" -
+    for m in re.finditer(r'^(FAILED|ERROR)\s+(\S+::\S+)', stdout_content, re.MULTILINE):
+        name = m.group(2)
+        if name not in seen:
+            results.append(TestResult(name=name, status=status_map[m.group(1)]))
+            seen.add(name)
  
     return results
  
