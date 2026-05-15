@@ -13,15 +13,16 @@ class TestResult:
     name: str
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
+ 
 ### Implement the parsing logic below ###
-
+ 
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
     Parse vitest JSON reporter output and return one TestResult per assertion.
  
     run.sh runs vitest with --reporter=verbose --reporter=json:
-    - verbose output  -> stdout  (human-readable, streaming as tests execute)
-    - json output     -> stdout  (single blob appended at the end)
+    - verbose output  → stdout  (human-readable, streaming as tests execute)
+    - json output     → stdout  (single blob appended at the end)
  
     The JSON blob always starts with {"numTotalTestSuites" (vitest's fixed key
     order). Anchoring on that literal avoids any false match on '{' characters
@@ -47,7 +48,7 @@ def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResu
         if idx == -1:
             continue
         try:
-            parsed = json.loads(content[idx:])
+            parsed, _ = json.JSONDecoder().raw_decode(content, idx)
             if isinstance(parsed, dict) and 'testResults' in parsed:
                 json_data = parsed
                 break
