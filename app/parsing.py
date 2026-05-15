@@ -13,48 +13,47 @@ class TestResult:
     name: str
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
-### Implement the parsing logic below ###
-
-import re
  
+import re
+
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
-    Parse pytest --verbose output and extract individual test results.
+    Parse pytest -v output and extract test results.
  
-    Pytest -v produces lines of the form:
-        run_tests.py::test_name PASSED                  [ xx%]
-        run_tests.py::test_param[val] FAILED            [ xx%]
+    Pytest verbose output lines have the form:
+        tests/test_foo.py::ClassName::test_method[param] PASSED [ 42%]
+        tests/test_foo.py::ClassName::test_method        FAILED [  5%]
+        tests/test_foo.py::ClassName::test_method        ERROR  [ 10%]
+        tests/test_foo.py::ClassName::test_method        SKIPPED [50%]
  
-    The regex captures the test id (everything up to the status word) and
-    the status word (PASSED / FAILED / ERROR / SKIPPED).
+    We parse both stdout and stderr to be robust against output routing differences.
     """
-    results = []
- 
-    # Match a pytest verbose result line:
-    #   <anything>::test_<name>[optional-param]  PASSED/FAILED/ERROR/SKIPPED
-    # The optional trailing [xx%] progress indicator is allowed after the status.
-    pattern = re.compile(
-        r'^(.+::test_\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)\b'
-    )
  
     status_map = {
-        'PASSED':  TestStatus.PASSED,
-        'FAILED':  TestStatus.FAILED,
-        'ERROR':   TestStatus.ERROR,
-        'SKIPPED': TestStatus.SKIPPED,
+        "PASSED":  TestStatus.PASSED,
+        "FAILED":  TestStatus.FAILED,
+        "ERROR":   TestStatus.ERROR,
+        "SKIPPED": TestStatus.SKIPPED,
     }
  
-    for line in stdout_content.splitlines():
-        match = pattern.match(line.rstrip())
-        if match:
-            name = match.group(1).strip()
-            status = status_map[match.group(2)]
-            results.append(TestResult(name=name, status=status))
+    pattern = re.compile(
+        r"^(\S+::\S+)\s+(PASSED|FAILED|ERROR|SKIPPED)",
+        re.MULTILINE,
+    )
+ 
+    results: List[TestResult] = []
+    seen: set = set()
+ 
+    for content in (stdout_content, stderr_content):
+        for match in pattern.finditer(content):
+            name = match.group(1)
+            status_str = match.group(2)
+            if name not in seen:
+                seen.add(name)
+                results.append(TestResult(name=name, status=status_map[status_str]))
  
     return results
  
- 
-### Implement the parsing logic above ###
 ### DO NOT MODIFY THE CODE BELOW ###
 def export_to_json(results: List[TestResult], output_path: Path) -> None:
     json_results = {'tests': [{'name': r.name, 'status': r.status.name} for r in results]}
