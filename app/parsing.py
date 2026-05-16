@@ -13,79 +13,38 @@ class TestResult:
     name: str
     status: TestStatus
 ### DO NOT MODIFY THE CODE ABOVE ###
- 
 ### Implement the parsing logic below ###
- 
+
+import re
+
 def parse_test_output(stdout_content: str, stderr_content: str) -> List[TestResult]:
     """
-    Parse vitest JSON reporter output and return one TestResult per assertion.
- 
-    run.sh runs vitest with --reporter=verbose --reporter=json:
-    - verbose output  → stdout  (human-readable, streaming as tests execute)
-    - json output     → stdout  (single blob appended at the end)
- 
-    The JSON blob always starts with {"numTotalTestSuites" (vitest's fixed key
-    order). Anchoring on that literal avoids any false match on '{' characters
-    that may appear in verbose progress lines or test names.
- 
-    Test name format:  <relative-file-path>::<fullName>
-    e.g.  tests/mount.test.tsx::Requirement 5: App default export > ...
+    Parse pytest verbose output and extract test results.
+
+    Expects lines like:
+        tests/test_parse.py::TestClass::test_name PASSED
+        tests/test_parse.py::test_name FAILED
     """
     results: List[TestResult] = []
-    json_data = None
- 
     status_map = {
-        'passed':  TestStatus.PASSED,
-        'failed':  TestStatus.FAILED,
-        'pending': TestStatus.SKIPPED,
-        'skipped': TestStatus.SKIPPED,
-        'todo':    TestStatus.SKIPPED,
+        "PASSED": TestStatus.PASSED,
+        "FAILED": TestStatus.FAILED,
+        "SKIPPED": TestStatus.SKIPPED,
+        "ERROR": TestStatus.ERROR,
     }
- 
-    # Search stdout first, then stderr as a fallback.
-    for content in (stdout_content, stderr_content):
-        idx = content.find('{"numTotalTestSuites"')
-        if idx == -1:
-            continue
-        try:
-            parsed, _ = json.JSONDecoder().raw_decode(content, idx)
-            if isinstance(parsed, dict) and 'testResults' in parsed:
-                json_data = parsed
-                break
-        except (json.JSONDecodeError, ValueError):
-            continue
- 
-    if not json_data:
-        return results
- 
-    for suite in json_data.get('testResults', []):
-        raw_path = suite.get('testFilePath') or suite.get('name', '')
-        # Strip container-specific prefix so names are environment-portable.
-        for prefix in ('/eval_assets/', '/app/'):
-            if raw_path.startswith(prefix):
-                raw_path = raw_path[len(prefix):]
-                break
- 
-        for assertion in suite.get('assertionResults', []):
-            full_name = (assertion.get('fullName') or '').strip()
-            if not full_name:
-                ancestors = assertion.get('ancestorTitles') or []
-                title = assertion.get('title') or ''
-                parts = list(ancestors) + ([title] if title else [])
-                full_name = ' > '.join(parts)
- 
-            raw_status = (assertion.get('status') or 'failed').lower()
-            status = status_map.get(raw_status, TestStatus.FAILED)
- 
-            results.append(TestResult(
-                name=f"{raw_path}::{full_name}",
-                status=status,
-            ))
- 
+    pattern = re.compile(r"^(\S+::\S+)\s+(PASSED|FAILED|SKIPPED|ERROR)")
+    combined = stdout_content + "\n" + stderr_content
+    for line in combined.splitlines():
+        line = line.strip()
+        match = pattern.match(line)
+        if match:
+            results.append(
+                TestResult(name=match.group(1), status=status_map[match.group(2)])
+            )
     return results
- 
+
+
 ### Implement the parsing logic above ###
- 
 ### DO NOT MODIFY THE CODE BELOW ###
 def export_to_json(results: List[TestResult], output_path: Path) -> None:
     json_results = {'tests': [{'name': r.name, 'status': r.status.name} for r in results]}
